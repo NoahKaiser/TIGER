@@ -1,2 +1,8 @@
 *.DS_Store
+uv.lock
+.python-version
 *.pyc
+.venv/
+.idea/
+cache/
+separated_audio/
