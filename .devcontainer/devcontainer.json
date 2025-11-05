@@ -1,0 +1,17 @@
+{
+  "name": "Default",
+  "dockerFile": "Dockerfile",
+  "customizations" : {
+    "jetbrains" : {
+      "backend" : "IntelliJ",
+      "settings" : {
+      },
+      "plugins": [
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git" : {}
+  },
+  "remoteUser": "devuser"
+}
