@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fast-bss-eval",
     "huggingface-hub",
     "librosa",
     "numpy",
@@ -16,7 +17,10 @@ dependencies = [
     "rich",
     "safetensors",
     "scipy-stubs",
+    "speechbrain",
     "torch-complex",
+    "torch-mir-eval",
+    "torch-optimizer",
     "torchcodec",
     "typeguard",
     "wandb",
@@ -78,6 +82,14 @@ torchvision = [
     { index = "pytorch-rocm64", extra = "rocm64" },
 ]
 pytorch-triton-rocm = [
+    { index = "pytorch-rocm63", extra = "rocm63" },
+    { index = "pytorch-rocm64", extra = "rocm64" },
+]
+
+torchaudio = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu118", extra = "cu118" },
+    { index = "pytorch-cu128", extra = "cu128" },
     { index = "pytorch-rocm63", extra = "rocm63" },
     { index = "pytorch-rocm64", extra = "rocm64" },
 ]

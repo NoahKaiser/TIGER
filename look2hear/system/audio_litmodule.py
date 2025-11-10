@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections.abc import MutableMapping
-from speechbrain.processing.speech_augmentation import SpeedPerturb
+from speechbrain.augment.time_domain import SpeedPerturb
 
 def flatten_dict(d, parent_key="", sep="_"):
     """Flattens a dictionary into a single-level dictionary while preserving
