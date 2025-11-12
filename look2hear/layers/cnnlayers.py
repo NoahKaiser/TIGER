@@ -802,7 +802,7 @@ class TAC(nn.Module):
         hidden_dim (int, optional): size of hidden layers in TAC operations.
         activation (str, optional): type of activation used. See asteroid.masknn.activations.
         norm_type (str, optional): type of normalization layer used. See asteroid.masknn.norms.
-    .. note:: Supports inputs of shape :math:`(batch, mic\_channels, features, chunk\_size, n\_chunks)`
+    .. note:: Supports inputs of shape :math:`(batch, mic_channels, features, chunk_size, n_chunks)`
         as in FasNet-TAC. The operations are applied for each element in ``chunk_size`` and ``n_chunks``.
         Output is of same shape as input.
     References
@@ -828,7 +828,7 @@ class TAC(nn.Module):
         """
         Args:
             x: (:class:`torch.Tensor`): Input multi-channel DPRNN features.
-                Shape: :math:`(batch, mic\_channels, features, chunk\_size, n\_chunks)`.
+                Shape: :math:`(batch, mic_channels, features, chunk_size, n_chunks)`.
             valid_mics: (:class:`torch.LongTensor`): tensor containing effective number of microphones on each batch.
                 Batches can be composed of examples coming from arrays with a different
                 number of microphones and thus the ``mic_channels`` dimension is padded.
@@ -836,7 +836,7 @@ class TAC(nn.Module):
                 Shape:  :math`(batch)`.
         Returns:
             output (:class:`torch.Tensor`): features for each mic_channel after TAC inter-channel processing.
-                Shape :math:`(batch, mic\_channels, features, chunk\_size, n\_chunks)`.
+                Shape :math:`(batch, mic_channels, features, chunk_size, n_chunks)`.
         """
         # Input is 5D because it is multi-channel DPRNN. DPRNN single channel is 4D.
         batch_size, nmics, channels, chunk_size, n_chunks = x.size()

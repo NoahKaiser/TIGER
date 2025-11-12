@@ -16,4 +16,4 @@ module load cuda/11.2
 # Run your python code
 export WANDB_API_KEY=3df4b50850a84840d28b55305ca54391ebaaf209
 
-uv run audio_train.py --conf_dir configs/tiger.yml
+uv run --extra=cu118 audio_train.py --conf_dir configs/tiger.yml
