@@ -6,3 +6,6 @@ uv.lock
 .idea/
 cache/
 separated_audio/
+out/
+*.out
+batch.sh

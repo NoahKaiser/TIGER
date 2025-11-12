@@ -138,7 +138,7 @@ def main(config):
     if config["training"]["early_stop"]:
         print_only("Instantiating EarlyStopping")
         callbacks.append(EarlyStopping(**config["training"]["early_stop"]))
-    callbacks.append(MyRichProgressBar(theme=RichProgressBarTheme()))
+    #callbacks.append(MyRichProgressBar(theme=RichProgressBarTheme()))
 
     # Don't ask GPU if they are not available.
     gpus = config["training"]["gpus"] if torch.cuda.is_available() else None

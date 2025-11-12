@@ -53,8 +53,7 @@ class AudioLightningModule(pl.LightningModule):
         # Speed Aug
         self.speedperturb = SpeedPerturb(
             self.config["datamodule"]["data_config"]["sample_rate"],
-            speeds=[95, 100, 105],
-            perturb_prob=1.0
+            speeds=[95, 100, 105]
         )
         # Save lightning"s AttributeDict under self.hparams
         self.default_monitor = "val_loss/dataloader_idx_0"
