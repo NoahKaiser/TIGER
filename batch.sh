@@ -14,7 +14,6 @@
 module load cuda/11.2
 #pyenv activate venv
 # Run your python code
-export WANDB_API_KEY=3df4b50850a84840d28b55305ca54391ebaaf209
-
+#export WANDB_API_KEY=
 uv run --extra=cu118 audio_train.py --conf_dir configs/tiger.yml
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
