@@ -12,6 +12,7 @@ dependencies = [
     "pandas",
     "pandas-stubs",
     "ptflops",
+    "python-dotenv>=1.2.1",
     "pytorch-lightning",
     "pyyaml",
     "rich",

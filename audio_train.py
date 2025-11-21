@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import os
 import sys
 import torch
@@ -32,7 +34,8 @@ warnings.filterwarnings("ignore")
 import wandb
 if os.environ.get("WANDB_API_KEY"):
     wandb.login(key=os.environ.get("WANDB_API_KEY"))
-
+else:
+    print("WANDB_API_KEY not found")
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--conf_dir",
