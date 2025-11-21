@@ -32,7 +32,7 @@ def pad_to_appropriate_length(x, lcm):
     return x
 
 
-class BaseModel(nn.Module, PyTorchModelHubMixin, repo_url="https://github.com/JusperLee/TIGER", pipeline_tag="audio-to-audio"):
+class BaseModel(nn.Module, PyTorchModelHubMixin, repo_url="https://github.com/klafuenf/TIGER", pipeline_tag="audio-to-audio"):
     def __init__(self, sample_rate, in_chan=1):
         super().__init__()
         self._sample_rate = sample_rate

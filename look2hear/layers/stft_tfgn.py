@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from packaging.version import parse as V
 from torch_complex.tensor import ComplexTensor
-from typeguard import check_argument_types
+from typeguard import typechecked
 
 from ..utils.complex_utils import is_complex
 from ..utils.inversible_interface import InversibleInterface
@@ -20,6 +20,7 @@ is_torch_1_9_plus = V(torch.__version__) >= V("1.9.0")
 is_torch_1_7_plus = V(torch.__version__) >= V("1.7")
 
 
+@typechecked
 class Stft(torch.nn.Module, InversibleInterface):
     def __init__(
         self,
@@ -31,7 +32,6 @@ class Stft(torch.nn.Module, InversibleInterface):
         normalized: bool = False,
         onesided: bool = True,
     ):
-        assert check_argument_types()
         super().__init__()
         self.n_fft = n_fft
         if win_length is None:

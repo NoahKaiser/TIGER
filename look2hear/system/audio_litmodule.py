@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections.abc import MutableMapping
-from speechbrain.processing.speech_augmentation import SpeedPerturb
+from speechbrain.augment.time_domain import SpeedPerturb
 
 def flatten_dict(d, parent_key="", sep="_"):
     """Flattens a dictionary into a single-level dictionary while preserving
@@ -53,8 +53,7 @@ class AudioLightningModule(pl.LightningModule):
         # Speed Aug
         self.speedperturb = SpeedPerturb(
             self.config["datamodule"]["data_config"]["sample_rate"],
-            speeds=[95, 100, 105],
-            perturb_prob=1.0
+            speeds=[95, 100, 105]
         )
         # Save lightning"s AttributeDict under self.hparams
         self.default_monitor = "val_loss/dataloader_idx_0"

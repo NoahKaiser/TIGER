@@ -36,8 +36,9 @@ audiomodel = getattr(look2hear.models, arg_dic["audionet"]["audionet_name"])(
     sample_rate=arg_dic["datamodule"]["data_config"]["sample_rate"],
     **arg_dic["audionet"]["audionet_config"]
 )
-# 配置GPU为mps
-device = torch.device("mps")
+
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+print(device)
 a = torch.randn(1, 1, 16000).to(device)
 total_macs = 0
 total_params = 0

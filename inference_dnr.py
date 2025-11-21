@@ -10,7 +10,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 parser = argparse.ArgumentParser()
 parser.add_argument("--audio_path", default="test/test_mixture_466.wav", help="Path to audio file")
 
-device = torch.device("cuda:7") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 print(device)
 
 # # Load model

@@ -140,7 +140,7 @@ def parse_args_as_dict(parser, return_plain_args=False, args=None):
     for group in parser._action_groups:
         group_dict = {a.dest: getattr(args, a.dest, None) for a in group._group_actions}
         args_dic[group.title] = group_dict
-    if sys.version_info.minor == 10:
+    if sys.version_info.minor >= 10:
         args_dic["main_args"] = args_dic["positional arguments"]
         del args_dic["positional arguments"]
     else:

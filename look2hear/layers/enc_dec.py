@@ -230,8 +230,8 @@ class Encoder(_EncDec):
         is_pinv (bool): Whether to be the pseudo inverse of filterbank.
         as_conv1d (bool): Whether to behave like nn.Conv1d.
             If True (default), forwarding input with shape :math:`(batch, 1, time)`
-            will output a tensor of shape :math:`(batch, freq, conv\_time)`.
-            If False, will output a tensor of shape :math:`(batch, 1, freq, conv\_time)`.
+            will output a tensor of shape :math:`(batch, freq, conv_time)`.
+            If False, will output a tensor of shape :math:`(batch, 1, freq, conv_time)`.
         padding (int): Zero-padding added to both sides of the input.
     """
 

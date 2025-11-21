@@ -51,7 +51,7 @@ Comparison of performance and efficiency of cinematic sound separation models on
 ## 📦 Installation
 
 ```bash
-git clone https://github.com/JusperLee/TIGER.git
+git clone https://github.com/klafuenf/TIGER.git
 cd TIGER
 pip install -r requirements.txt
 ```
