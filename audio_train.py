@@ -154,7 +154,7 @@ def main(config):
     comet_logger = WandbLogger(
             name=config["exp"]["exp_name"], 
             save_dir=os.path.join(logger_dir, config["exp"]["exp_name"]), 
-            project="Real-work-dataset",
+            project="Enhancing-Conversations-for-Hearing-Impairements",
             # offline=True
     )
 
