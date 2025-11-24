@@ -35,7 +35,7 @@ import wandb
 if os.environ.get("WANDB_API_KEY"):
     wandb.login(key=os.environ.get("WANDB_API_KEY"))
 else:
-    print("WANDB_API_KEY not found")
+    raise "WANDB_API_KEY not found"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--conf_dir",
