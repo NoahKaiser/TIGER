@@ -174,7 +174,8 @@ def main(config):
         # sync_batchnorm=True,
         # fast_dev_run=True,
     )
-    trainer.fit(system)
+    ckpt_path = config["training"].get("ckpt_path", None)
+    trainer.fit(system, ckpt_path=ckpt_path)
     print_only("Finished Training")
     best_k = {k: v.item() for k, v in checkpoint.best_k_models.items()}
     with open(os.path.join(exp_dir, "best_k_models.json"), "w") as f:

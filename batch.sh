@@ -5,7 +5,7 @@
 #SBATCH --output=job_name%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --time=9-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
