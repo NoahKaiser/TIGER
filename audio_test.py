@@ -29,7 +29,7 @@ from rich.progress import (
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--conf_dir",
+parser.add_argument("--conf_dir", #hier ist die conf.yml, die beim Training unter checkpoint/"exp_name" gespeichert wird, gemeint.
                     default="local/mixit_conf.yml",
                     help="Full path to save best validation model")
 
@@ -55,7 +55,7 @@ def main(config):
     config["train_conf"]["main_args"]["exp_dir"] = os.path.join(
         os.getcwd(), "Experiments", "checkpoint", config["train_conf"]["exp"]["exp_name"]
     )
-    model_path = os.path.join(config["train_conf"]["main_args"]["exp_dir"], "best_model.pth")
+    model_path = os.path.join(config["train_conf"]["main_args"]["exp_dir"], "best_model.pth") #Pfad zum besten Modell, best_model.pth wird nach dem erfolgreichen Training erstellt.
     # import pdb; pdb.set_trace()
     # conf["train_conf"]["masknet"].update({"n_src": 2})
     model =  getattr(look2hear.models, config["train_conf"]["audionet"]["audionet_name"]).from_pretrain(

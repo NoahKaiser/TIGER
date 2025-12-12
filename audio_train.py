@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 import os
+from pathlib import Path
 import sys
 import torch
 from torch import Tensor
@@ -28,6 +29,9 @@ from collections.abc import MutableMapping
 from look2hear.utils import print_only, MyRichProgressBar, RichProgressBarTheme
 
 import warnings
+
+from pathlib import Path
+from own_modules.callbacks_lightning import ExternalStopCallback
 
 warnings.filterwarnings("ignore")
 
@@ -142,6 +146,10 @@ def main(config):
         print_only("Instantiating EarlyStopping")
         callbacks.append(EarlyStopping(**config["training"]["early_stop"]))
     #callbacks.append(MyRichProgressBar(theme=RichProgressBarTheme()))
+    #eigener Callback, um Training per flag STOP manuell nach einem batch-Durchlauf beenden zu koennen
+    stop_flag_path = Path(exp_dir) / "STOP" #hier muss ein file "STOP" existieren, um das Training zu beenden.
+    callbacks.append(ExternalStopCallback(flag_path=stop_flag_path))
+
 
     # Don't ask GPU if they are not available.
     gpus = config["training"]["gpus"] if torch.cuda.is_available() else None
@@ -174,7 +182,7 @@ def main(config):
         # sync_batchnorm=True,
         # fast_dev_run=True,
     )
-    ckpt_path = config["training"].get("ckpt_path", None)
+    ckpt_path = config["training"].get("ckpt_path", None) #restore training from checkpoint, if given in tiger.yml
     trainer.fit(system, ckpt_path=ckpt_path)
     print_only("Finished Training")
     best_k = {k: v.item() for k, v in checkpoint.best_k_models.items()}
@@ -186,7 +194,7 @@ def main(config):
     system.cpu()
 
     to_save = system.audio_model.serialize()
-    torch.save(to_save, os.path.join(exp_dir, "best_model.pth"))
+    torch.save(to_save, os.path.join(exp_dir, "best_model.pth")) #best model is saved in best_model.pth
 
 
 if __name__ == "__main__":

@@ -55,19 +55,20 @@ class BaseModel(nn.Module, PyTorchModelHubMixin, repo_url="https://github.com/kl
         model.load_state_dict(model_dict)
         return model
 
-    # @staticmethod
-    # def from_pretrain(pretrained_model_conf_or_path, *args, **kwargs):
-    #     from . import get
+    @staticmethod
+    def from_pretrain(pretrained_model_conf_or_path, *args, **kwargs):
+        from . import get
 
-    #     conf = torch.load(
-    #         pretrained_model_conf_or_path, map_location="cpu"
-    #     )  # Attempt to find the model and instantiate it.
+        conf = torch.load(
+            pretrained_model_conf_or_path, weights_only=False
+            #map_location="cpu",
+        )  # Attempt to find the model and instantiate it.
 
-    #     model_class = get(conf["model_name"])
-    #     # model_class = get("Conv_TasNet")
-    #     model = model_class(*args, **kwargs)
-    #     model.load_state_dict(conf["state_dict"])
-    #     return model
+        model_class = get(conf["model_name"])
+        # model_class = get("Conv_TasNet")
+        model = model_class(*args, **kwargs)
+        model.load_state_dict(conf["state_dict"])
+        return model
 
     def serialize(self):
         import pytorch_lightning as pl  # Not used in torch.hub
