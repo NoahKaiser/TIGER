@@ -18,5 +18,9 @@
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu128 audio_train.py --conf_dir configs/tiger.yml
-
-uv run --extra=cu128 audio_test.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-small-on-EchoSet/conf.yml
+#verwende cu128 wegen dr pytorch module
+#module load cuda/12.8
+#module load cudnn/9
+#module list
+uv run --extra=cu118 audio_test.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-small-on-EchoSet/conf.yml
+#-> verwende cu118 wegen der GPU GTX 1080 Ti

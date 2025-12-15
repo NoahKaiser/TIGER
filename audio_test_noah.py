@@ -78,29 +78,29 @@ def main(config):
     os.makedirs(ex_save_dir, exist_ok=True)
     metrics = MetricsTracker(
         save_file=os.path.join(ex_save_dir, "metrics.csv"))
-    torch.no_grad().__enter__()
-    with progress: 
-        for idx in progress.track(range(len(test_set))):
-            if idx == 825:
+    with torch.no_grad():
+       with progress:
+         for idx in progress.track(range(len(test_set))):
+             if idx == 825:
                 # Forward the network on the mixture.
-                mix, sources, key = tensors_to_device(test_set[idx],
+                 mix, sources, key = tensors_to_device(test_set[idx],
                                                         device=model_device)
-                est_sources = model(mix[None])
-                mix_np = mix
-                sources_np = sources
-                est_sources_np = est_sources.squeeze(0)
-                # metrics(mix=mix_np,
-                #         clean=sources_np,
-                #         estimate=est_sources_np,
-                #         key=key)
-                save_dir = os.path.join("./result/TIGER", "idx{}".format(idx))
-                # est_sources_np = normalize_tensor_wav(est_sources_np)
-                for i in range(est_sources_np.shape[0]):
-                    os.makedirs(os.path.join(save_dir, "s{}/".format(i + 1)), exist_ok=True)
-                    # torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key, est_sources_np[i].unsqueeze(0).cpu(), 16000)
-                    torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key.split("/")[-1], est_sources_np[i].unsqueeze(0).cpu(), 16000)
-                # if idx % 50 == 0:
-                #     metricscolumn.update(metrics.update())
+                 est_sources = model(mix[None])
+                 mix_np = mix
+                 sources_np = sources
+                 est_sources_np = est_sources.squeeze(0)
+                 # metrics(mix=mix_np,
+                 #         clean=sources_np,
+                 #         estimate=est_sources_np,
+                 #         key=key)
+                 save_dir = os.path.join("./result/TIGER", "idx{}".format(idx))
+                 # est_sources_np = normalize_tensor_wav(est_sources_np)
+                 for i in range(est_sources_np.shape[0]):
+                     os.makedirs(os.path.join(save_dir, "s{}/".format(i + 1)), exist_ok=True)
+                     # torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key, est_sources_np[i].unsqueeze(0).cpu(), 16000)
+                     torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key.split("/")[-1], est_sources_np[i].unsqueeze(0).cpu(), 16000)
+                 # if idx % 50 == 0:
+                 #     metricscolumn.update(metrics.update())
     metrics.final()
 
 
