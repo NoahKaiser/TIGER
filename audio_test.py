@@ -71,7 +71,7 @@ def main(config):
         **config["train_conf"]["datamodule"]["data_config"]
     )
     datamodule.setup()
-    _, _ , test_set = datamodule.make_sets()
+    _, _ , test_set = datamodule.make_sets
    
     # Randomly choose the indexes of sentences to save.
     ex_save_dir = os.path.join(config["train_conf"]["main_args"]["exp_dir"], "results/")

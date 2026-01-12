@@ -71,7 +71,7 @@ def main(config):
         **config["train_conf"]["datamodule"]["data_config"]
     )
     datamodule.setup()
-    _, _ , test_set = datamodule.make_sets()
+    _, _ , test_set = datamodule.make_sets #property, keine Klammern!
    
     # Randomly choose the indexes of sentences to save.
     ex_save_dir = os.path.join(config["train_conf"]["main_args"]["exp_dir"], "results/")
@@ -81,24 +81,27 @@ def main(config):
     with torch.no_grad():
        with progress:
          for idx in progress.track(range(len(test_set))):
-             if idx == 825:
-                # Forward the network on the mixture.
-                 mix, sources, key = tensors_to_device(test_set[idx],
+
+          # Forward the network on the mixture.
+          mix, sources, key = tensors_to_device(test_set[idx],
                                                         device=model_device)
-                 est_sources = model(mix[None])
-                 mix_np = mix
-                 sources_np = sources
-                 est_sources_np = est_sources.squeeze(0)
-                 # metrics(mix=mix_np,
-                 #         clean=sources_np,
-                 #         estimate=est_sources_np,
-                 #         key=key)
-                 save_dir = os.path.join("./result/TIGER", "idx{}".format(idx))
+          est_sources = model(mix[None])
+          mix_np = mix
+          sources_np = sources
+          est_sources_np = est_sources.squeeze(0)
+          metrics(mix=mix_np,
+                  clean=sources_np,
+                  estimate=est_sources_np,
+                key=key)
+          save_dir = os.path.join("/no_backups/s1495/TIGER/result", "idx{}".format(idx)) # hier am besten Pfad noch in config editierbar machen
                  # est_sources_np = normalize_tensor_wav(est_sources_np)
-                 for i in range(est_sources_np.shape[0]):
-                     os.makedirs(os.path.join(save_dir, "s{}/".format(i + 1)), exist_ok=True)
-                     # torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key, est_sources_np[i].unsqueeze(0).cpu(), 16000)
-                     torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key.split("/")[-1], est_sources_np[i].unsqueeze(0).cpu(), 16000)
+          for i in range(est_sources_np.shape[0]):
+                    os.makedirs(os.path.join(save_dir, "s{}/".format(i + 1)), exist_ok=True)
+                    # torchaudio.save(os.path.join(save_dir, "s{}/".format(i + 1)) + key, est_sources_np[i].unsqueeze(0).cpu(), 16000)
+                    torchaudio.save(
+                        os.path.join(save_dir, "s{}/".format(i + 1)) + key.split("/")[-1],
+                        est_sources_np[i].unsqueeze(0).cpu(),
+                        16000)
                  # if idx % 50 == 0:
                  #     metricscolumn.update(metrics.update())
     metrics.final()
