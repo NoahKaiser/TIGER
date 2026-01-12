@@ -420,6 +420,10 @@ class MultiHeadSelfAttention2D(nn.Module):
         emb_dim = Q.shape[-1]  # C*F/n_head
 
         attn_mat = torch.matmul(Q, K.transpose(1, 2)) / (emb_dim**0.5)  # [B', T, T]
+
+        #Apply causal mask to the attention matrix! Only for frame-path???
+
+
         attn_mat = F.softmax(attn_mat, dim=2)  # [B', T, T]
         V = torch.matmul(attn_mat, V)  # [B', T, C*F/n_head]
         V = V.reshape(old_shape)  # [B', T, C/n_head, F]
