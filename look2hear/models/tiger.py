@@ -213,7 +213,7 @@ class InjectionMultiSum(nn.Module):
 
         global_feat = self.global_embedding(x_g)
         global_feat = F.interpolate(global_feat, size=T, mode="nearest")
-
+        #Selective Attention applied here? local features are weighted by the global mask:
         out = local_feat * sig_act + global_feat
         return out
 
