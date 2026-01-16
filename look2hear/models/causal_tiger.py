@@ -418,8 +418,12 @@ class MultiHeadSelfAttention2D(nn.Module):
         old_shape = V.shape
         V = V.flatten(start_dim=2)  # [B', T, C*F/n_head]
         emb_dim = Q.shape[-1]  # C*F/n_head
-
+        #Calculate attention matrix. Could be replaced with scaled_dot_product_attention(...,is_causal=True) for causal self-attention
         attn_mat = torch.matmul(Q, K.transpose(1, 2)) / (emb_dim**0.5)  # [B', T, T]
+
+        #Apply causal mask to the attention matrix! Only for frame-path???
+
+
         attn_mat = F.softmax(attn_mat, dim=2)  # [B', T, T]
         V = torch.matmul(attn_mat, V)  # [B', T, C*F/n_head]
         V = V.reshape(old_shape)  # [B', T, C/n_head, F]
@@ -461,7 +465,7 @@ class Recurrent(nn.Module):
             MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
             normalizations.get("LayerNormalization4D")((out_channels, 1))
         ])
-        
+        #changes to frame_path: delete MSA-Module(UConvBlock) and use causal mask for F3A_Module(MaskedMultiHeadSelfAttention2D())
         self.frame_path = nn.ModuleList([
             UConvBlock(out_channels, in_channels, upsampling_depth),
             MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
