@@ -1,9 +1,11 @@
 from .tiger import TIGER
+from .causal_tiger import CausalTIGER
 from .tiger_dnr import TIGERDNR
 from .base_model import BaseModel
 
 __all__ = [
     "TIGER",
+    "CausalTIGER",
 ]
 
 

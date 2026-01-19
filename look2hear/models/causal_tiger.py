@@ -6,6 +6,12 @@ import torch.nn.functional as F
 import math
 from .base_model import BaseModel
 from ..layers import activations, normalizations
+"""
+following adjustments are made to achieve a causal tiger model:
+ 1) MSA module (UConvBloc()) in the frame-path deleted because temporal global features are used: replaced by nn.Identity() to 
+ 2) F3A module supplemented by causal mask: see CausalMultiHeadSelfAttention2D()
+ 3) 
+"""
 
 
 def GlobLN(nOut):
@@ -244,6 +250,7 @@ class InjectionMulti(nn.Module):
 
 class UConvBlock(nn.Module):
     """
+    Called MSA-Module (Multi-Scale Selective Attention in the paper)
     This class defines the block which performs successive downsampling and
     upsampling in order to be able to analyze the input features in multiple
     resolutions.
@@ -325,6 +332,7 @@ class UConvBlock(nn.Module):
         return self.res_conv(expanded) + residual
 
 class MultiHeadSelfAttention2D(nn.Module):
+    "called F3A module in the paper"
     def __init__(
         self,
         in_chan: int,
@@ -418,12 +426,8 @@ class MultiHeadSelfAttention2D(nn.Module):
         old_shape = V.shape
         V = V.flatten(start_dim=2)  # [B', T, C*F/n_head]
         emb_dim = Q.shape[-1]  # C*F/n_head
-        #Calculate attention matrix. Could be replaced with scaled_dot_product_attention(...,is_causal=True) for causal self-attention
+
         attn_mat = torch.matmul(Q, K.transpose(1, 2)) / (emb_dim**0.5)  # [B', T, T]
-
-        #Apply causal mask to the attention matrix! Only for frame-path???
-
-
         attn_mat = F.softmax(attn_mat, dim=2)  # [B', T, T]
         V = torch.matmul(attn_mat, V)  # [B', T, C*F/n_head]
         V = V.reshape(old_shape)  # [B', T, C/n_head, F]
@@ -443,6 +447,127 @@ class MultiHeadSelfAttention2D(nn.Module):
 
         return x
     
+class CausalMultiHeadSelfAttention2D(nn.Module):
+    "causal version of F3A module for the use in the frame path, to achieve causal self-attention"
+    def __init__(
+        self,
+        in_chan: int,
+        n_freqs: int,
+        n_head: int = 4,
+        hid_chan: int = 4,
+        act_type: str = "prelu",
+        norm_type: str = "LayerNormalization4D",
+        dim: int = 3,
+        *args,
+        **kwargs,
+    ):
+        super(CausalMultiHeadSelfAttention2D, self).__init__()
+        self.in_chan = in_chan
+        self.n_freqs = n_freqs
+        self.n_head = n_head
+        self.hid_chan = hid_chan
+        self.act_type = act_type
+        self.norm_type = norm_type
+        self.dim = dim
+
+        assert self.in_chan % self.n_head == 0
+
+        self.Queries = nn.ModuleList()
+        self.Keys = nn.ModuleList()
+        self.Values = nn.ModuleList()
+
+        for _ in range(self.n_head):
+            self.Queries.append(
+                ATTConvActNorm(
+                    in_chan=self.in_chan,
+                    out_chan=self.hid_chan,
+                    kernel_size=1,
+                    act_type=self.act_type,
+                    norm_type=self.norm_type,
+                    n_freqs=self.n_freqs,
+                    is2d=True,
+                )
+            )
+            self.Keys.append(
+                ATTConvActNorm(
+                    in_chan=self.in_chan,
+                    out_chan=self.hid_chan,
+                    kernel_size=1,
+                    act_type=self.act_type,
+                    norm_type=self.norm_type,
+                    n_freqs=self.n_freqs,
+                    is2d=True,
+                )
+            )
+            self.Values.append(
+                ATTConvActNorm(
+                    in_chan=self.in_chan,
+                    out_chan=self.in_chan // self.n_head,
+                    kernel_size=1,
+                    act_type=self.act_type,
+                    norm_type=self.norm_type,
+                    n_freqs=self.n_freqs,
+                    is2d=True,
+                )
+            )
+
+        self.attn_concat_proj = ATTConvActNorm(
+            in_chan=self.in_chan,
+            out_chan=self.in_chan,
+            kernel_size=1,
+            act_type=self.act_type,
+            norm_type=self.norm_type,
+            n_freqs=self.n_freqs,
+            is2d=True,
+        )
+
+    def forward(self, x: torch.Tensor):
+        if self.dim == 4:
+            x = x.transpose(-2, -1).contiguous()
+
+        batch_size, _, time, freq = x.size()
+        residual = x
+
+        all_Q = [q(x) for q in self.Queries]  # [B, E, T, F]
+        all_K = [k(x) for k in self.Keys]  # [B, E, T, F]
+        all_V = [v(x) for v in self.Values]  # [B, C/n_head, T, F]
+
+        Q = torch.cat(all_Q, dim=0)  # [B', E, T, F]    B' = B*n_head
+        K = torch.cat(all_K, dim=0)  # [B', E, T, F]
+        V = torch.cat(all_V, dim=0)  # [B', C/n_head, T, F]
+
+        Q = Q.transpose(1, 2).flatten(start_dim=2)  # [B', T, E*F]
+        K = K.transpose(1, 2).flatten(start_dim=2)  # [B', T, E*F]
+        V = V.transpose(1, 2)  # [B', T, C/n_head, F]
+        old_shape = V.shape
+        V = V.flatten(start_dim=2)  # [B', T, C*F/n_head]
+
+        # Replace manual calculation of attention with torch.nn.scaled_dot_product_attention(...,is_causal=True) for causal self-attention
+
+        #emb_dim = Q.shape[-1]  # C*F/n_head
+        #attn_mat = torch.matmul(Q, K.transpose(1, 2)) / (emb_dim**0.5)  # [B', T, T]
+        #attn_mat = F.softmax(attn_mat, dim=2)  # [B', T, T]
+        #V = torch.matmul(attn_mat, V)  # [B', T, C*F/n_head]
+
+        V = F.scaled_dot_product_attention(Q, K, V, dropout_p=0.0, is_causal=True) # for training create self.dropout_p and use it in scaled_dot_product_attention(...,dropout_p=self.dropout_p
+
+        V = V.reshape(old_shape)  # [B', T, C/n_head, F]
+        V = V.transpose(1, 2)  # [B', C/n_head, T, F]
+        emb_dim = V.shape[1]  # C/n_head
+
+        x = V.view([self.n_head, batch_size, emb_dim, time, freq])  # [n_head, B, C/n_head, T, F]
+        x = x.transpose(0, 1).contiguous()  # [B, n_head, C/n_head, T, F]
+
+        x = x.view([batch_size, self.n_head * emb_dim, time, freq])  # [B, C, T, F]
+        x = self.attn_concat_proj(x)  # [B, C, T, F]
+
+        x = x + residual
+
+        if self.dim == 4:
+            x = x.transpose(-2, -1).contiguous()
+
+        return x
+
 
 class Recurrent(nn.Module):
     def __init__(
@@ -467,8 +592,10 @@ class Recurrent(nn.Module):
         ])
         #changes to frame_path: delete MSA-Module(UConvBlock) and use causal mask for F3A_Module(MaskedMultiHeadSelfAttention2D())
         self.frame_path = nn.ModuleList([
-            UConvBlock(out_channels, in_channels, upsampling_depth),
-            MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
+            #UConvBlock(out_channels, in_channels, upsampling_depth),
+            nn.Identity(), #replacement for UConvBlock() to maintain indices calling in Recurrent()
+            #MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
+            CausalMultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
             normalizations.get("LayerNormalization4D")((out_channels, 1))
         ])
         
@@ -491,7 +618,8 @@ class Recurrent(nn.Module):
         return x.permute(0, 2, 1, 3).contiguous() # B, nband, N, T
     
     def freq_time_process(self, x, B, nband, N, T):
-        # Process Frequency Path
+        "last dimension if freq_fea/frame_fea is attention axis"
+        # Process Frequency Path: frequency axis subject of the self-attention
         residual_1 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous() # B, T, N, nband
         freq_fea = self.freq_path[0](x.view(B*T, N, nband)) # B*T, N, nband
@@ -500,7 +628,7 @@ class Recurrent(nn.Module):
         freq_fea = self.freq_path[2](freq_fea) # B, N, T, nband
         freq_fea = freq_fea.permute(0, 1, 3, 2).contiguous()
         x = freq_fea + residual_1 # B, N, nband, T
-        # Process Frame Path
+        # Process Frame Path: frame_path
         residual_2 = x.clone()
         x2 = x.permute(0, 2, 1, 3).contiguous()
         frame_fea = self.frame_path[0](x2.view(B*nband, N, T)) # B*nband, N, T
@@ -510,7 +638,7 @@ class Recurrent(nn.Module):
         x = frame_fea + residual_2 # B, N, nband, T
         return x
         
-class TIGER(BaseModel):
+class CausalTIGER(BaseModel):
     def __init__(
         self,
         out_channels=128,

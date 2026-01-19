@@ -18,6 +18,7 @@
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu128 audio_train.py --conf_dir configs/tiger.yml
+uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
 #verwende cu128 wegen dr pytorch module
 #module load cuda/12.8
 #module load cudnn/9
