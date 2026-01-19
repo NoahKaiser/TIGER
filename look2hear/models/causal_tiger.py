@@ -654,7 +654,7 @@ class CausalTIGER(BaseModel):
         num_sources=2,
         sample_rate=44100,
     ):
-        super(TIGER, self).__init__(sample_rate=sample_rate)
+        super(CausalTIGER, self).__init__(sample_rate=sample_rate)
         
         self.sample_rate = sample_rate
         self.win = win
