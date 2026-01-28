@@ -23,6 +23,7 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
         std = wav_tensor.std(-1, keepdim=True)
     return (wav_tensor - mean) / (std + eps)
 
+"MP3Dataset(Dataset) is used for EchoSetDatamodule(object)"
 
 class MP3DDataset(Dataset):
     def __init__(
