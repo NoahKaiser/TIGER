@@ -41,7 +41,7 @@ class ECHIDataset(Dataset):
         if json_dir == None:
             raise ValueError("JSON DIR is None!")
         if n_src not in [1, 2]:
-            raise ValueError("{} is not in [1, 2]".format(n_src)) #
+            raise ValueError("{} is not in [1, 2]".format(n_src)) #change this for four target speaker
         self.json_dir = json_dir
         self.sample_rate = sample_rate
         self.normalize_audio = normalize_audio
@@ -50,7 +50,7 @@ class ECHIDataset(Dataset):
             self.seg_len = None
             self.fps_len = None
         else:
-            self.seg_len = int(segment * sample_rate)
+            self.seg_len = int(segment * sample_rate) #gives segment length in samples, segment is in seconds
 
         self.n_src = n_src
         self.test = self.seg_len is None
@@ -68,35 +68,8 @@ class ECHIDataset(Dataset):
 
         self.mix = []
         self.sources = []
-        if self.n_src == 1:
-            orig_len = len(mix_infos) * 2
-            drop_utt, drop_len = 0, 0
-            if not self.test:
-                for i in range(len(mix_infos) - 1, -1, -1):
-                    if mix_infos[i][1] < self.seg_len:
-                        drop_utt = drop_utt + 1
-                        drop_len = drop_len + mix_infos[i][1]
-                        del mix_infos[i]
-                        for src_inf in sources_infos:
-                            del src_inf[i]
-                    else:
-                        for src_inf in sources_infos:
-                            self.mix.append(mix_infos[i])
-                            self.sources.append(src_inf[i])
-            else:
-                for i in range(len(mix_infos)):
-                    for src_inf in sources_infos:
-                        self.mix.append(mix_infos[i])
-                        self.sources.append(src_inf[i])
 
-            print_(
-                "Drop {} utts({:.2f} h) from {} (shorter than {} samples)".format(
-                    drop_utt, drop_len / sample_rate / 3600, orig_len, self.seg_len
-                )
-            )
-            self.length = len(self.mix)
-
-        elif self.n_src == 2:
+        if self.n_src == 2: #make this suitable for 4 targets
             orig_len = len(mix_infos)
             drop_utt, drop_len = 0, 0
             if not self.test:
@@ -121,34 +94,10 @@ class ECHIDataset(Dataset):
         return self.length
 
     def preprocess_audio_only(self, idx: int):
-        if self.n_src == 1:
-            if self.mix[idx][1] == self.seg_len or self.test:
-                rand_start = 0
-            else:
-                rand_start = np.random.randint(0, self.mix[idx][1] - self.seg_len)
-            if self.test:
-                stop = None
-            else:
-                stop = rand_start + self.seg_len
-            # Load mixture
-            x, _ = sf.read(
-                self.mix[idx][0], start=rand_start, stop=stop, dtype="float32"
-            )
-            # Load sources
-            s, _ = sf.read(
-                self.sources[idx][0], start=rand_start, stop=stop, dtype="float32"
-            )
-            # torch from numpy
-            target = torch.from_numpy(s)
-            mixture = torch.from_numpy(x)
-            if self.normalize_audio:
-                m_std = mixture.std(-1, keepdim=True)
-                mixture = normalize_tensor_wav(mixture, eps=self.EPS, std=m_std)
-                target = normalize_tensor_wav(target, eps=self.EPS, std=m_std)
-            # return mixture, target.unsqueeze(0), self.mix[idx][0].split("/")[-1]
-            return mixture, target.unsqueeze(0), self.mix[idx][0]
-        # import pdb; pdb.set_trace()
-        if self.n_src == 2:
+    """
+     change this function so that for each session multiple samples (iterated with idx) are created and not only one
+    """
+        if self.n_src == 2:  #make this suitable for 4 targets and change indexing, make it iterabel through samples (segments of a all sessions)
             if self.mix[idx][1] == self.seg_len or self.test:
                 rand_start = 0
             else:

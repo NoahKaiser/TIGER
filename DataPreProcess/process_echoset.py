@@ -59,7 +59,7 @@ def preprocess_lrs2_audio(inp_args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("LRS2 audio data preprocessing")
+    parser = argparse.ArgumentParser("EchoSet audio data preprocessing")
     parser.add_argument(
         "--in_dir",
         type=str,

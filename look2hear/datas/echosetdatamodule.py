@@ -66,6 +66,8 @@ class MP3DDataset(Dataset):
 
         self.mix = []
         self.sources = []
+        #the following if statetments drop audio files that are shorter than the required audio lenght for training(e.g. 4s)
+        # seg_len = int(segment * sample_rate) see config .yml file
         if self.n_src == 1:
             orig_len = len(mix_infos) * 2
             drop_utt, drop_len = 0, 0
@@ -118,7 +120,7 @@ class MP3DDataset(Dataset):
     def __len__(self):
         return self.length
 
-    def preprocess_audio_only(self, idx: int):
+    def preprocess_audio_only(self, idx: int): #preprocess_audio_only() is called in the get __getitem__() function of the datamodule
         if self.n_src == 1:
             if self.mix[idx][1] == self.seg_len or self.test:
                 rand_start = 0
