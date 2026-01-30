@@ -9,7 +9,7 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse19
+#SBATCH --nodelist=linse3
 
 # Activate everything you need
 #module load cuda/11.2
@@ -25,7 +25,7 @@
 #module load cuda/12.8
 #module load cudnn/9
 #module list
-uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger.yml
+#uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger.yml
 
 #uv run --extra=cu118 audio_test_noah.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-small-on-EchoSet/conf.yml
 #-> verwende cu118 wegen der GPU GTX 1080 Ti
@@ -36,9 +36,12 @@ uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger.yml
 #uv run --extra=cu118 stft_Pytorch_Test.py --in /data/public/EchoSet/train/1LXtFkjw3qL/1_6_kitchen/2817_5322/spk2_reverb.wav \
                                           #--out /no_backups/s1495/TIGER/iSTFT_Output/iSTFT_spk2_reverb_kausal.wav \
                                           #--n_fft 2048 --hop_length 512
-#uv run --extra=cu118 Simple_Self_Attention_Experiment.py
 
 
+
+
+# Vergleiche zwei .wav files, auf 16 kHz resamplen und nur die ersten 20 s vergleichen:
+#uv run compare_two_wav.py /data/public/CHiME9/ha/train/train_01.ha.wav /data/public/CHiME9/ref/train/train_01.ha.pos1.wav 16000 240
 
 
 

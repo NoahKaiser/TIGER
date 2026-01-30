@@ -39,13 +39,16 @@ ECHI should have the following structure:
     └── eval/ref
 
 
-
+In a first iteration of this skript only ha/train and ref/train of the Dataset is used
+Multi-Channel recordings ha/train are converted to mono, ref/train are already mono
 '''
-def preprocess_one_dir(in_data_dir, out_dir, data_type):
+def preprocess_one_dir(in_data_dir, out_dir, data_type): #change how files are read! Have to be applied on to the new datat structure
     """Create .json file for one condition."""
     mix_infos = []
     s1_infos = []
     s2_infos = []
+    s3_infos = []
+    s4_infos = []
     in_dir = os.path.abspath(os.path.join(in_data_dir, data_type))
     print("Process {} set...".format(data_type))
     for root, dirs, files in os.walk(in_dir):
@@ -87,7 +90,7 @@ def preprocess_one_dir(in_data_dir, out_dir, data_type):
 
 def preprocess_echi_dataset(inp_args):
     """Create .json files for all conditions based on the prepocessing if EchoSet"""
-    for data_type in ["train", "val", "test"]: #replace this with "train", "dev" and later "eval"
+    for data_type in ["train", "dev", "eval"]: #replace this with "train", "dev" and later "eval"
         preprocess_one_dir(
             inp_args.in_dir, inp_args.out_dir, data_type
         )
