@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pytorch-lightning",
     "pyyaml",
+    "resampy>=0.4.3",
     "rich",
     "safetensors",
     "scipy-stubs",
