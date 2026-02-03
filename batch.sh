@@ -19,7 +19,7 @@
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu128 audio_train.py --conf_dir configs/tiger.yml
 
-#uv run --extra=cu118 DataPreProcess/process_echi.py --in_dir /data/public/CHiME9 --out_dir out
+#uv run --extra=cu118 DataPreProcess/process_echi_old.py --in_dir /data/public/CHiME9 --out_dir out
 
 #verwende cu128 wegen der pytorch module
 #module load cuda/12.8
@@ -41,7 +41,7 @@
 
 
 # Vergleiche zwei .wav files, auf 16 kHz resamplen und nur die ersten 20 s vergleichen:
-#uv run compare_two_wav.py /data/public/CHiME9/ha/train/train_01.ha.wav /data/public/CHiME9/ref/train/train_01.ha.pos1.wav 16000 240
+#uv run --extra=cpu compare_two_wav.py /data/public/CHiME9/ref/dev/dev_02.ha.pos1.wav /no_backups/s1495/PreProcessed_ECHI/Processed_ECHI/ha/dev/dev_02.ha.16kHz.mono.wav 16000 10
 
 
 

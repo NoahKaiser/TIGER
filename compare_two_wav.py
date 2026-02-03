@@ -63,8 +63,9 @@ def main(wav1: str, wav2: str, target_sr: int | None = None, max_seconds: float 
     # choose SR
     if target_sr is None:
         target_sr = sr1
-    x1 = resample_to(x1, sr1, target_sr)
-    x2 = resample_to(x2, sr2, target_sr)
+    #resample if different sample rate
+    #x1 = resample_to(x1, sr1, target_sr)
+    #x2 = resample_to(x2, sr2, target_sr)
 
     # optionally limit duration (faster for long files)
     if max_seconds is not None:

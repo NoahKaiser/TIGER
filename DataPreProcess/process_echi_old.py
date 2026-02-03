@@ -55,8 +55,8 @@ ToDo:
 
 example of using it: 
 
-- converting(16kH, mono) + create json file: uv run DataPreProcess/process_echi.py --source_in_dir /data/public/CHiME9/ha/train/ --source_out_dir /no_backups/s1495/Resampled_ECHI/ha/train
-- creating only json files if converted files already in out_dir: uv run --ectra=cpu process_echi.py --source_out_dir /path/out --json_only
+- converting(16kH, mono) + create json file: uv run DataPreProcess/process_echi_old.py --source_in_dir /data/public/CHiME9/ha/train/ --source_out_dir /no_backups/s1495/Resampled_ECHI/ha/train
+- creating only json files if converted files already in out_dir: uv run --ectra=cpu process_echi_old.py --source_out_dir /path/out --json_only
 
 data/public/CHiME9/ref/train
 '''
