@@ -22,6 +22,21 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
     if std is None:
         std = wav_tensor.std(-1, keepdim=True)
     return (wav_tensor - mean) / (std + eps)
+"safe_read() complements sf.read() in the case of a failure and gives the path to the file that causes the failure "
+
+def safe_read(path, start=None, stop=None, dtype="float32"):
+    try:
+        return sf.read(path, start=start, stop=stop, dtype=dtype)
+    except Exception as e:
+        try:
+            info = sf.info(path)
+        except Exception as e2:
+            info = f"<sf.info failed: {type(e2).__name__} {repr(e2)}>"
+        raise RuntimeError(
+            f"Libsndfile read failed\n"
+            f"path={path}\nstart={start} stop={stop} dtype={dtype}\n"
+            f"sf.info={info}\nexc={type(e).__name__} repr={repr(e)}"
+        ) from e
 
 "MP3Dataset(Dataset) is used for EchoSetDatamodule(object)"
 
@@ -131,11 +146,11 @@ class MP3DDataset(Dataset):
             else:
                 stop = rand_start + self.seg_len
             # Load mixture
-            x, _ = sf.read(
+            x, _ = safe_read(
                 self.mix[idx][0], start=rand_start, stop=stop, dtype="float32"
             )
             # Load sources
-            s, _ = sf.read(
+            s, _ = safe_read(
                 self.sources[idx][0], start=rand_start, stop=stop, dtype="float32"
             )
             # torch from numpy
@@ -158,13 +173,13 @@ class MP3DDataset(Dataset):
             else:
                 stop = rand_start + self.seg_len
             # Load mixture
-            x, _ = sf.read(
+            x, _ = safe_read(
                 self.mix[idx][0], start=rand_start, stop=stop, dtype="float32"
             )
             # Load sources
             source_arrays = []
             for src in self.sources:
-                s, _ = sf.read(
+                s, _ = safe_read(
                     src[idx][0], start=rand_start, stop=stop, dtype="float32"
                 )
                 source_arrays.append(s)

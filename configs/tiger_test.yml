@@ -28,12 +28,12 @@ loss:
 
 # Training config
 training:
-  system: AudioLightningModule
+  system: AudioLightningModuleTest
   gpus: [0]
   parallel: ddp
   epochs: 500
   early_stop:
-    monitor: val_loss/dataloader_idx_0
+    monitor: val_loss
     mode: min
     patience: 20
     verbose: true
@@ -64,10 +64,10 @@ datamodule:
     sample_rate: 16000
     segment: 3.0
     normalize_audio: false
-    batch_size: 1
+    batch_size: 4
     num_workers: 8
     pin_memory: true
     persistent_workers: false
 
 exp:
-  exp_name: TIGER-small-on-EchoSet
+  exp_name: TIGER-on-EchoSet-Test

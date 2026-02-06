@@ -134,7 +134,7 @@ def main(config):
     checkpoint = ModelCheckpoint(
         checkpoint_dir,
         filename="{epoch}",
-        monitor="val_loss/dataloader_idx_0",
+        monitor="val_loss", #val_loss/dataloader_idx_0, decides what validation will create a checkpoint
         mode="min",
         save_top_k=5,
         verbose=True,

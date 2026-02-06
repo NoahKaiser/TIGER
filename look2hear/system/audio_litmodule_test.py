@@ -4,6 +4,25 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections.abc import MutableMapping
 from speechbrain.augment.time_domain import SpeedPerturb
 
+"""
+Experiment: no test set used during validation
+
+change 
+
+    def val_dataloader(self):
+        return [self.val_loader, self.test_loader]
+        
+to
+
+    def val_dataloader(self):
+        return self.val_loader
+        
+        
+deleted self.test_step_outputs = [] in init
+deleted dataloader_idx==1 block in validation_step
+deleted test part in on_validation_epoch_end
+"""
+
 def flatten_dict(d, parent_key="", sep="_"):
     """Flattens a dictionary into a single-level dictionary while preserving
     parent keys. Taken from
@@ -27,7 +46,7 @@ def flatten_dict(d, parent_key="", sep="_"):
     return dict(items)
 
 
-class AudioLightningModule(pl.LightningModule):
+class AudioLightningModuleTest(pl.LightningModule):
     def __init__(
         self,
         audio_model=None,
@@ -56,11 +75,11 @@ class AudioLightningModule(pl.LightningModule):
             speeds=[95, 100, 105]
         )
         # Save lightning"s AttributeDict under self.hparams
-        self.default_monitor = "val_loss/dataloader_idx_0"
+        self.default_monitor = "val_loss" #use val_los/dataloader_idx_0 if for system AudioLightningModule is used, test-set used for validation every 10 Epochs
         self.save_hyperparameters(self.config_to_hparams(self.config))
         # self.print(self.audio_model)
         self.validation_step_outputs = []
-        self.test_step_outputs = []
+
         
 
     def forward(self, wav, mouth=None):
@@ -114,9 +133,7 @@ class AudioLightningModule(pl.LightningModule):
         return {"loss": loss}
 
 
-    def validation_step(self, batch, batch_nb, dataloader_idx):
-        # cal val loss
-        if dataloader_idx == 0:
+    def validation_step(self, batch, batch_nb):
             mixtures, targets, _ = batch
             # print(mixtures.shape)
             est_sources = self(mixtures)
@@ -134,22 +151,7 @@ class AudioLightningModule(pl.LightningModule):
             
             return {"val_loss": loss}
 
-        # cal test loss, validation with a different testset every 10 epochs
-        if (self.trainer.current_epoch) % 10 == 0 and dataloader_idx == 1:
-            mixtures, targets, _ = batch
-            # print(mixtures.shape)
-            est_sources = self(mixtures)
-            tloss = self.loss_func["val"](est_sources, targets)
-            self.log(
-                "test_loss",
-                tloss,
-                on_epoch=True,
-                prog_bar=True,
-                sync_dist=True,
-                logger=True,
-            )
-            self.test_step_outputs.append(tloss)
-            return {"test_loss": tloss}
+
 
     def on_validation_epoch_end(self):
         # val
@@ -169,15 +171,8 @@ class AudioLightningModule(pl.LightningModule):
             {"val_pit_sisnr": -val_loss, "epoch": self.current_epoch}
         )
 
-        # test
-        if (self.trainer.current_epoch) % 10 == 0:
-            avg_loss = torch.stack(self.test_step_outputs).mean()
-            test_loss = torch.mean(self.all_gather(avg_loss))
-            self.logger.experiment.log(
-                {"test_pit_sisnr": -test_loss, "epoch": self.current_epoch}
-            )
         self.validation_step_outputs.clear()  # free memory
-        self.test_step_outputs.clear()  # free memory
+
 
     def configure_optimizers(self):
         """Initialize optimizers, batch-wise and epoch-wise schedulers."""
@@ -218,7 +213,7 @@ class AudioLightningModule(pl.LightningModule):
 
     def val_dataloader(self):
         """Validation dataloader"""
-        return [self.val_loader, self.test_loader]
+        return self.val_loader
 
     def on_save_checkpoint(self, checkpoint):
         """Overwrite if you want to save more things in the checkpoint."""

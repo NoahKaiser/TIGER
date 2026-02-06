@@ -1,15 +1,15 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=Train_Causal_TIGER
-#SBATCH --output=job_name%j.%N.out
+#SBATCH --job-name=Train_TIGER_Test
+#SBATCH --output=%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --time=7-00:00:00
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse3
+#SBATCH --nodelist=linse19
 
 # Activate everything you need
 #module load cuda/11.2
@@ -17,7 +17,8 @@
 # Run your python code
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
-#uv run --extra=cu128 audio_train.py --conf_dir configs/tiger.yml
+#uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_test.yml
+#uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
 #uv run --extra=cu118 DataPreProcess/process_echi_old.py --in_dir /data/public/CHiME9 --out_dir out
 
@@ -25,7 +26,8 @@
 #module load cuda/12.8
 #module load cudnn/9
 #module list
-#uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger.yml
+#hat nur mit cu118 funktioniert, keine Ahnung warum?
+uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger.yml
 
 #uv run --extra=cu118 audio_test_noah.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-small-on-EchoSet/conf.yml
 #-> verwende cu118 wegen der GPU GTX 1080 Ti
