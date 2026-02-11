@@ -9,8 +9,8 @@ from ..layers import activations, normalizations
 """
 following adjustments are made to achieve a causal tiger model:
  1) MSA module (UConvBloc()) in the frame-path deleted because temporal global features are used: replaced by nn.Identity() to 
- 2) F3A module supplemented by causal mask: see CausalMultiHeadSelfAttention2D()
- 3) 
+ 2) F3A module in frame path supplemented by causal mask: see CausalMultiHeadSelfAttention2D()
+ 3) PerFrameFrequencyAttention replaces MultiHeadSelfAttention2D() (F3A Module) in frequency path to make it causal to
 """
 
 
@@ -570,6 +570,127 @@ class CausalMultiHeadSelfAttention2D(nn.Module):
         return x
 
 
+
+class PerFrameFreqSelfAttention(nn.Module):
+    """
+    Frequency-axis (band-axis) self-attention computed independently per time frame.
+    Input/Output: x in [B, C, T, F]
+    For each t, attention is over F tokens, embedding dimension ~ C (or projected).
+    This is strictly time-causal because it never mixes across T.
+    """
+    def __init__(
+        self,
+        in_chan: int,
+        n_head: int = 4,
+        hid_chan: int = 32,
+        act_type: str = "prelu",
+        norm_type: str = "LayerNormalization4D",
+        n_freqs: int = -1,   # here this is F (nband) for LayerNormalization4D shape config
+    ):
+        super().__init__()
+        assert in_chan % n_head == 0, "in_chan must be divisible by n_head"
+        self.in_chan = in_chan
+        self.n_head = n_head
+        self.hid_chan = hid_chan
+        self.n_freqs = n_freqs
+
+        # Reuse your existing pointwise Q/K/V blocks (1x1 Conv2d + act + norm)
+        # NOTE: These operate on [B, C, T, F] and are local in T, F because kernel_size=1.
+        self.Queries = nn.ModuleList()
+        self.Keys    = nn.ModuleList()
+        self.Values  = nn.ModuleList()
+
+        for _ in range(n_head):
+            self.Queries.append(
+                ATTConvActNorm(
+                    in_chan=in_chan,
+                    out_chan=hid_chan,
+                    kernel_size=1,
+                    act_type=act_type,
+                    norm_type=norm_type,
+                    n_freqs=n_freqs,
+                    is2d=True,
+                )
+            )
+            self.Keys.append(
+                ATTConvActNorm(
+                    in_chan=in_chan,
+                    out_chan=hid_chan,
+                    kernel_size=1,
+                    act_type=act_type,
+                    norm_type=norm_type,
+                    n_freqs=n_freqs,
+                    is2d=True,
+                )
+            )
+            self.Values.append(
+                ATTConvActNorm(
+                    in_chan=in_chan,
+                    out_chan=in_chan // n_head,
+                    kernel_size=1,
+                    act_type=act_type,
+                    norm_type=norm_type,
+                    n_freqs=n_freqs,
+                    is2d=True,
+                )
+            )
+
+        self.out_proj = ATTConvActNorm(
+            in_chan=in_chan,
+            out_chan=in_chan,
+            kernel_size=1,
+            act_type=act_type,
+            norm_type=norm_type,
+            n_freqs=n_freqs,
+            is2d=True,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: [B, C, T, F]
+        returns: [B, C, T, F]
+        """
+        B, C, T, Freq = x.shape
+        residual = x
+
+        # Build per-head Q/K/V: [B, E, T, F], [B, E, T, F], [B, C/H, T, F]
+        all_Q = [q(x) for q in self.Queries]
+        all_K = [k(x) for k in self.Keys]
+        all_V = [v(x) for v in self.Values]
+
+        # Concatenate heads along batch dimension like your original implementation
+        # Shapes:
+        #   Q: [B*H, E, T, F]
+        Q = torch.cat(all_Q, dim=0)
+        K = torch.cat(all_K, dim=0)
+        V = torch.cat(all_V, dim=0)
+
+        # --- Key step: make tokens be bands F, independently per time frame ---
+        # We fold time into batch: (B*H, E, T, F) -> (B*H*T, F, E)
+        # Then attention runs over F tokens (band axis) for each (batch, head, time).
+        Q = Q.permute(0, 2, 3, 1).contiguous()  # [B*H, T, F, E]
+        K = K.permute(0, 2, 3, 1).contiguous()  # [B*H, T, F, E]
+        V = V.permute(0, 2, 3, 1).contiguous()  # [B*H, T, F, C/H]
+
+        Q = Q.view(-1, Freq, Q.shape[-1])       # [B*H*T, F, E]
+        K = K.view(-1, Freq, K.shape[-1])       # [B*H*T, F, E]
+        V = V.view(-1, Freq, V.shape[-1])       # [B*H*T, F, C/H]
+
+        # Attention over frequency tokens (no causal mask needed; time not involved here)
+        # Output: [B*H*T, F, C/H]
+        Y = F.scaled_dot_product_attention(Q, K, V, dropout_p=0.0, is_causal=False)
+
+        # Unfold back: [B*H, T, F, C/H] -> [B*H, C/H, T, F]
+        Y = Y.view(B * self.n_head, T, Freq, -1).permute(0, 3, 1, 2).contiguous()
+
+        # Merge heads back to channel dimension: [B, C, T, F]
+        Y = Y.view(self.n_head, B, C // self.n_head, T, Freq).transpose(0, 1).contiguous()
+        Y = Y.view(B, C, T, Freq)
+
+        # output projection + residual
+        Y = self.out_proj(Y)
+        return Y + residual
+
 class Recurrent(nn.Module):
     def __init__(
         self, 
@@ -588,7 +709,15 @@ class Recurrent(nn.Module):
 
         self.freq_path = nn.ModuleList([
             UConvBlock(out_channels, in_channels, upsampling_depth),
-            MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
+            #MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu", norm_type="LayerNormalization4D", dim=4),
+            PerFrameFreqSelfAttention(
+                in_chan=out_channels,
+                n_head=n_head,
+                hid_chan=att_hid_chan,
+                act_type="prelu",
+                norm_type="LayerNormalization4D",
+                n_freqs=1,  # keep consistent with your current LayerNormalization4D config usage
+            ),
             normalizations.get("LayerNormalization4D")((out_channels, 1))
         ])
         #changes to frame_path: delete MSA-Module(UConvBlock) and use causal mask for F3A_Module(MaskedMultiHeadSelfAttention2D())
@@ -639,7 +768,7 @@ class Recurrent(nn.Module):
         x = frame_fea + residual_2 # B, N, nband, T
         return x
         
-class CausalTIGER(BaseModel):
+class CausalTIGER2(BaseModel):
     def __init__(
         self,
         out_channels=128,
@@ -655,7 +784,7 @@ class CausalTIGER(BaseModel):
         num_sources=2,
         sample_rate=44100,
     ):
-        super(CausalTIGER, self).__init__(sample_rate=sample_rate)
+        super(CausalTIGER2, self).__init__(sample_rate=sample_rate)
         
         self.sample_rate = sample_rate
         self.win = win
