@@ -39,7 +39,15 @@ training:
     verbose: true
   SpeedAug: False
   ckpt_path: Null # Null if training from scratch
-  
+  checkpoint:
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
+
+
 # Optim config
 optimizer:
   optim_name: adam
@@ -48,10 +56,10 @@ optimizer:
 
 # Sche config
 scheduler: 
-  sche_name: ReduceLROnPlateau
-  sche_config:
-    patience: 10
-    factor: 0.5
+  sche_name: Null #ReduceLROnPlateau
+  sche_config: {}
+    #patience: 10
+    #factor: 0.5
 
 # Data config
 datamodule:

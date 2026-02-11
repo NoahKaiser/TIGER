@@ -33,6 +33,11 @@ parser.add_argument("--conf_dir", #hier ist die conf.yml, die beim Training unte
                     default="local/mixit_conf.yml",
                     help="Full path to save best validation model")
 
+parser.add_argument(
+    "--save_dir",
+    required=True,
+    help="Base directory where separated outputs will be written (idx*/s*/...).",
+)
 
 compute_metrics = ["si_sdr", "sdr"]
 #os.environ['CUDA_VISIBLE_DEVICES'] = "8" #auskommentiert, weil SLURM die Umgebungsbariable automatisch setzt
@@ -93,7 +98,7 @@ def main(config):
                   clean=sources_np,
                   estimate=est_sources_np,
                 key=key)
-          save_dir = os.path.join("/no_backups/s1495/TIGER/result", "idx{}".format(idx)) # hier am besten Pfad noch in config editierbar machen
+          save_dir = os.path.join(config["save_dir"], f"idx{idx}")
                  # est_sources_np = normalize_tensor_wav(est_sources_np)
           for i in range(est_sources_np.shape[0]):
                     os.makedirs(os.path.join(save_dir, "s{}/".format(i + 1)), exist_ok=True)
@@ -109,6 +114,7 @@ def main(config):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    os.makedirs(args.save_dir, exist_ok=True)
     arg_dic = dict(vars(args))
 
     # Load training config

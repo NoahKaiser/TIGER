@@ -108,8 +108,8 @@ class ECHIDataset(Dataset):
         self.cum = [0]
         for _, L in self.mix:
             n = self._num_segments(int(L))
-            self.seg_counts.append(n)
-            self.cum.append(self.cum[-1] + n)
+            self.seg_counts.append(n)   #creates a List with the segments counts for each session
+            self.cum.append(self.cum[-1] + n) #counts the nummber of total segments for one Dataset
 
         self.total_segments = self.cum[-1]
         if self.total_segments == 0:

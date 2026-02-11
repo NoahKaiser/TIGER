@@ -28,18 +28,24 @@ loss:
 
 # Training config
 training:
-  system: AudioLightningModuleTest
+  system: AudioLightningModule
   gpus: [0]
   parallel: ddp
   epochs: 500
   early_stop:
-    monitor: val_loss
+    monitor: val_loss/dataloader_idx_0
     mode: min
     patience: 20
     verbose: true
   SpeedAug: False
   ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/epoch=157.ckpt
-  
+  checkpoint:
+    monitor: "val_loss/dataloader_idx_0"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
 # Optim config
 optimizer:
   optim_name: adam

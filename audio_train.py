@@ -134,11 +134,11 @@ def main(config):
     checkpoint = ModelCheckpoint(
         checkpoint_dir,
         filename="{epoch}",
-        monitor="val_loss", #val_loss/dataloader_idx_0, decides what validation will create a checkpoint
-        mode="min",
-        save_top_k=5,
-        verbose=True,
-        save_last=True,
+        monitor= config["training"]["checkpoint"]["monitor"], #val_loss, decides what validation will create a checkpoint
+        mode=config["training"]["checkpoint"]["mode"],
+        save_top_k=config["training"]["checkpoint"]["save_top_k"],
+        verbose=config["training"]["checkpoint"]["verbose"],
+        save_last=config["training"]["checkpoint"]["save_last"],
     )
     callbacks.append(checkpoint)
 
