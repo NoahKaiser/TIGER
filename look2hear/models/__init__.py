@@ -1,6 +1,7 @@
 from .tiger import TIGER
 from .causal_tiger import CausalTIGER
 from .causal_tiger2 import CausalTIGER2
+from .causal_tiger3 import CausalTIGER3
 from .tiger_dnr import TIGERDNR
 from .base_model import BaseModel
 

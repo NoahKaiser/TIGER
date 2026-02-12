@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=CausalTIGER2_on_EchosSet
+#SBATCH --job-name=CausalTIGER3_on_EchosSet
 #SBATCH --output=%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -9,7 +9,7 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse20
+#SBATCH --nodelist=linse19
 
 
 
@@ -20,7 +20,7 @@
 #uv run --extra=cu118 DataPreProcess/process_echi_old.py --in_dir /data/public/CHiME9 --out_dir out
 
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
-uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger2.yml
+uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger3.yml
 #uv run --extra=cu118 audio_test_noah.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/conf.yml --save_dir /no_backups/s1495/TIGER/CausalTIGER_on_EchoSet
 #-> verwende cu118 wegen der GPU GTX 1080 Ti
 
