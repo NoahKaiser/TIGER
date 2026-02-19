@@ -1,6 +1,7 @@
 from .matrix import pairwise_neg_sisdr
 from .matrix import pairwise_neg_sdsdr
 from .matrix import pairwise_neg_snr
+from .matrix import pairwise_neg_se_sisdr
 from .matrix import singlesrc_neg_sisdr
 from .matrix import singlesrc_neg_sdsdr
 from .matrix import singlesrc_neg_snr
@@ -21,6 +22,7 @@ __all__ = [
     "MixITLossWrapper",
     "PITLossWrapper",
     "PairwiseNegSDR",
+    "PairwiseNegSE_SISDR"
     "SingleSrcNegSDR",
     "singlesrc_neg_sisdr",
     "pairwise_neg_sisdr",

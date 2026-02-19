@@ -48,6 +48,50 @@ class PairwiseNegSDR(_Loss):
             pair_wise_sdr = 10 * torch.log10(pair_wise_sdr + self.EPS)
         return -pair_wise_sdr
 
+class PairwiseNegSE_SISDR(_Loss):
+    """
+    Pairwise negative SE-SI-SDR loss (Borsdorf et al.).
+    Same as pairwise SI-SDR, but numerator is stabilized too:
+        10*log10( (||proj||^2 + eps) / (||e||^2 + eps) )
+    This remains informative when target is silence (s=0). :contentReference[oaicite:2]{index=2}
+    """
+    def __init__(self, zero_mean=True, take_log=True, EPS=1e-8):
+        super().__init__()
+        self.zero_mean = zero_mean
+        self.take_log = take_log
+        self.EPS = EPS
+
+    def forward(self, ests, targets):
+        if targets.size() != ests.size() or targets.ndim != 3:
+            raise TypeError(
+                f"Inputs must be of shape [batch, n_src, time], got {targets.size()} and {ests.size()} instead"
+            )
+
+        if self.zero_mean:
+            targets = targets - torch.mean(targets, dim=2, keepdim=True)
+            ests = ests - torch.mean(ests, dim=2, keepdim=True)
+
+        # Pairwise broadcast: targets -> [B, 1, n_src, T], ests -> [B, n_src, 1, T]
+        s_target = targets.unsqueeze(1)
+        s_estimate = ests.unsqueeze(2)
+
+        # SI projection for each (est_i, tgt_j)
+        pair_wise_dot = torch.sum(s_estimate * s_target, dim=3, keepdim=True)          # [B, n_src, n_src, 1]
+        s_target_energy = torch.sum(s_target ** 2, dim=3, keepdim=True) + self.EPS    # [B, 1, n_src, 1]
+        pair_wise_proj = pair_wise_dot * s_target / s_target_energy                   # [B, n_src, n_src, T]
+
+        # SI error
+        e_noise = s_estimate - pair_wise_proj                                          # [B, n_src, n_src, T]
+
+        # SE-SI-SDR (power ratio form): (||proj||^2 + eps) / (||e||^2 + eps)
+        num = torch.sum(pair_wise_proj ** 2, dim=3) + self.EPS
+        den = torch.sum(e_noise ** 2, dim=3) + self.EPS
+        pair_wise_sdr = num / den                                                      # [B, n_src, n_src]
+
+        if self.take_log:
+            pair_wise_sdr = 10 * torch.log10(pair_wise_sdr)
+
+        return -pair_wise_sdr
 
 class SingleSrcNegSDR(_Loss):
     def __init__(
@@ -189,6 +233,7 @@ class freq_MSE_Loss(_Loss):
 pairwise_neg_sisdr = PairwiseNegSDR("sisdr")
 pairwise_neg_sdsdr = PairwiseNegSDR("sdsdr")
 pairwise_neg_snr = PairwiseNegSDR("snr")
+pairwise_neg_se_sisdr = PairwiseNegSE_SISDR()
 singlesrc_neg_sisdr = SingleSrcNegSDR("sisdr")
 singlesrc_neg_sdsdr = SingleSrcNegSDR("sdsdr")
 singlesrc_neg_snr = SingleSrcNegSDR("snr")

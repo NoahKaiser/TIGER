@@ -155,7 +155,7 @@ class AudioLightningModuleECHI(pl.LightningModule):
             {"learning_rate": self.optimizer.param_groups[0]["lr"], "epoch": self.current_epoch}
         )
         self.logger.experiment.log(
-            {"val_pit_sisnr": -val_loss, "epoch": self.current_epoch}
+            {"val_pit_se-sisdr": -val_loss, "epoch": self.current_epoch}
         )
 
         self.validation_step_outputs.clear()  # free memory

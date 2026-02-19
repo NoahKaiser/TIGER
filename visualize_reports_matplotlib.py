@@ -105,7 +105,7 @@ def main():
         raise ValueError("Provide --metrics_csv")
 
     # --- Load data ---
-    # Single CSV mode (produced by audio_test_noah.py / MetricsTracker)
+    # Single CSV mode (produced by audio_test_EchoSet.py / MetricsTracker)
     data = pd.read_csv(args.metrics_csv)
     # Ensure some metadata columns exist for downstream logic
     if "file" not in data.columns:
