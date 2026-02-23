@@ -4,33 +4,20 @@ import re
 import subprocess
 import wave
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import soundfile as sf
+
 """
 ECHI preprocessing + JSON manifest generation (device-specific).
 
-What this script does:
-- Takes an ECHI dataset root and processes ONE device (--device ha or aria) split-wise (train/dev/eval).
-- For each split:
-  1) Converts the device mixture/source WAVs (multi-channel sessions) to mono, 16 kHz, 16-bit PCM using SoX
-     and stores them in: <output_root>/Processed_ECHI/<device>/<split>/ (flat directory).
-     (Skips recomputation if --json_only is set, and skips existing files unless --overwrite is used.)
-  2) Optionally fixes small resampling length mismatches (default enabled):
-     If ref/<split> exists, each processed mix is cropped/padded at the END to match the sample length of
-     <session>.<device>.pos1.wav (only allowed up to --max_len_diff samples, default: 1).
-  3) Writes mix.json in the split output directory:
-     A list of [absolute_path_to_processed_mix_wav, num_samples].
-  4) If ref/<split> exists, writes target_pos1.json ... target_pos4.json (aligned by index to mix.json):
-     Each contains [absolute_path_to_ref_target_wav, num_samples] for the selected device and the given position.
-     If ref/<split> is missing, target JSONs (and length-fix) are skipped for that split.
-     
-- Normal run (processing + fix length + json):
-   uv run --extra=cpu DataPreProcess/preprocess_echi.py --echi_root /data/public/CHiME9 --output_root /no_backups/s1495 --device ha
-- Only rebuild json (still fixes length if ref exists, because it can): --json_only
-- Disable the length-fix patch: --no_fix_len_to_ref
-- If you ever see larger mismatches and want to allow up to 2 samples difference: --max_len_diff 2
+Adjusted for Target Speaker Extraction (TSE):
+- target_pos{1..4}.json entries become:
+    ["/abs/path/<session>.<device>.pos{pos}.wav", "P###", num_samples]
+
+Speaker IDs are inferred from symlinks in ref/<split>/, e.g.:
+  train_01.ha.P005.wav -> train_01.ha.pos1.wav
 """
 
 # -------------------------
@@ -219,7 +206,6 @@ def index_targets_by_session_and_pos(ref_split_dir: Path, device: str) -> Dict[T
     """
     Build an index:
       (session_key, pos) -> Path to <session>.<device>.pos{pos}.wav
-    Example file: train_01.ha.pos3.wav or eval_02.aria.pos1.wav
 
     We only index targets matching the chosen device and pos1..pos4.
     """
@@ -254,6 +240,71 @@ def index_targets_by_session_and_pos(ref_split_dir: Path, device: str) -> Dict[T
     return index
 
 
+def index_speakers_by_session_and_pos(ref_split_dir: Path, device: str) -> Dict[Tuple[str, int], str]:
+    """
+    Build an index from symlinks:
+      (session_key, pos) -> "P###"
+
+    Example symlink:
+      train_01.ha.P005.wav -> train_01.ha.pos1.wav
+
+    We scan *.wav in ref_split_dir that are symlinks, match:
+      <session>.<device>.Pddd.wav
+    and resolve their link target to infer pos.
+    """
+    ref_split_dir = Path(ref_split_dir)
+    if not ref_split_dir.is_dir():
+        raise NotADirectoryError(f"ref split directory not found: {ref_split_dir}")
+
+    if device not in ("ha", "aria"):
+        raise ValueError(f"device must be 'ha' or 'aria', got: {device}")
+
+    # symlink filename pattern providing the speaker id
+    link_pat = re.compile(
+        rf"^(?P<session>(train|dev|eval)_\d+)\.{device}\.(?P<spk>P\d+)\.wav$"
+    )
+
+    # target filename pattern to infer position from the symlink's destination
+    tgt_pat = re.compile(
+        rf"^(?P<session>(train|dev|eval)_\d+)\.{device}\.pos(?P<pos>[1-4])\.wav$"
+    )
+
+    out: Dict[Tuple[str, int], str] = {}
+
+    for p in sorted(ref_split_dir.glob("*.wav")):
+        if not p.is_symlink():
+            continue
+
+        m = link_pat.match(p.name)
+        if not m:
+            continue
+
+        session = m.group("session")
+        spk = m.group("spk")
+
+        # readlink target (may be relative, as in your example)
+        link_target = p.readlink()
+        target_name = link_target.name  # we only need the filename to parse pos
+
+        mt = tgt_pat.match(target_name)
+        if not mt:
+            # ignore unexpected symlinks
+            continue
+
+        pos = int(mt.group("pos"))
+        key = (session, pos)
+
+        if key in out and out[key] != spk:
+            raise ValueError(
+                f"Conflicting speaker IDs for {key}: {out[key]} vs {spk} "
+                f"(from symlink {p.name})"
+            )
+
+        out[key] = spk
+
+    return out
+
+
 def write_target_pos_jsons(
     ref_split_dir: Path,
     device: str,
@@ -265,11 +316,15 @@ def write_target_pos_jsons(
       target_pos1.json ... target_pos4.json
 
     Each list is aligned by index with mix_manifest.
+
+    TSE-adjusted entry format:
+      ["/abs/path/<session>.<device>.pos{pos}.wav", "P###", num_samples]
     """
     out_json_dir = Path(out_json_dir)
     out_json_dir.mkdir(parents=True, exist_ok=True)
 
     target_index = index_targets_by_session_and_pos(ref_split_dir=ref_split_dir, device=device)
+    spk_index = index_speakers_by_session_and_pos(ref_split_dir=ref_split_dir, device=device)
 
     mix_paths = [Path(p) for (p, _) in mix_manifest]
     mix_sessions = [session_key_from_mix_path(p) for p in mix_paths]
@@ -285,9 +340,18 @@ def write_target_pos_jsons(
                     f"Expected file like: {session}.{device}.pos{pos}.wav in {ref_split_dir}"
                 )
 
-            tgt_path = target_index[key]
+            if key not in spk_index:
+                raise FileNotFoundError(
+                    f"Missing speaker-id symlink for session='{session}', pos{pos}, device='{device}'. "
+                    f"Expected symlink like: {session}.{device}.P###.wav -> {session}.{device}.pos{pos}.wav "
+                    f"in {ref_split_dir}"
+                )
+
+            tgt_path = target_index[key]  # real pos-file
+            spk_id = spk_index[key]       # P###
             n = get_num_samples_wav(tgt_path)
-            entries.append([str(tgt_path.resolve()), n])
+
+            entries.append([str(tgt_path.resolve()), spk_id, n])
 
         json_path = out_json_dir / f"target_pos{pos}.json"
         with open(json_path, "w", encoding="utf-8") as fp:
@@ -405,7 +469,7 @@ def run_for_split(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser("ECHI full-dataset preprocessing + JSON manifests")
+    parser = argparse.ArgumentParser("ECHI full-dataset preprocessing + JSON manifests (TSE-adjusted targets)")
 
     parser.add_argument(
         "--echi_root",
