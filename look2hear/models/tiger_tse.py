@@ -506,7 +506,7 @@ class Recurrent(nn.Module):
         x = frame_fea + residual_2 # B, N, nband, T
         return x
         
-class TIGER(BaseModel):
+class TSE_TIGER(BaseModel):
     def __init__(
         self,
         out_channels=128,
@@ -522,7 +522,7 @@ class TIGER(BaseModel):
         num_sources=2,
         sample_rate=44100,
     ):
-        super(TIGER, self).__init__(sample_rate=sample_rate)
+        super(TSE_TIGER, self).__init__(sample_rate=sample_rate)
         
         self.sample_rate = sample_rate
         self.win = win
@@ -579,7 +579,7 @@ class TIGER(BaseModel):
 
         return input, rest
         
-    def forward(self, input):
+    def forward(self, input, spk_emb=None):
         # input shape: (B, C, T)
         was_one_d = False
         if input.ndim == 1:

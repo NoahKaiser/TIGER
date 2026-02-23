@@ -2,13 +2,16 @@ from .tiger import TIGER
 from .causal_tiger import CausalTIGER
 from .causal_tiger2 import CausalTIGER2
 from .causal_tiger3 import CausalTIGER3
+from .tiger_tse import TSE_TIGER
 from .tiger_dnr import TIGERDNR
 from .base_model import BaseModel
 
 __all__ = [
     "TIGER",
     "CausalTIGER",
-    "CausalTIGER2"
+    "CausalTIGER2",
+    "CausalTIGER3",
+    "TSE_TIGER",
 ]
 
 

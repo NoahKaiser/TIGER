@@ -1,7 +1,7 @@
 #Copy of tiger-small.yml
 # Network config
 audionet:
-  audionet_name: TIGER
+  audionet_name: TSE_TIGER
   audionet_config:
     out_channels: 128
     in_channels: 256
@@ -28,7 +28,7 @@ loss:
 
 # Training config
 training:
-  system: AudioLightningModuleECHI
+  system: AudioLightningModuleTSE_ECHI
   gpus: [0]
   parallel: ddp
   epochs: 500
@@ -62,12 +62,12 @@ scheduler:
 
 # Data config
 datamodule:
-  data_name: ECHIDataModule
+  data_name: TSE_ECHIDataModule
   data_config: #important: add the path to the Preprocessed dataset where the json files are located
-    train_dir: /no_backups/s1495/Processed_ECHI/ha/train
-    valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
-    test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
-    spk_emb_path: /path/to/spk_emb_ecapa.pt #
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
     n_src: 4
     sample_rate: 16000
     segment: 3.0
@@ -76,6 +76,8 @@ datamodule:
     num_workers: 8
     pin_memory: true
     persistent_workers: false
-
+#speaker_embedding:
+  #path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+  #sort_ids: true
 exp:
   exp_name: TSE-TIGER-on-ECHI
