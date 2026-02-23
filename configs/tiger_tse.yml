@@ -1,7 +1,7 @@
-
+#Copy of tiger-small.yml
 # Network config
 audionet:
-  audionet_name: CausalTIGER2
+  audionet_name: TIGER
   audionet_config:
     out_channels: 128
     in_channels: 256
@@ -9,47 +9,48 @@ audionet:
     upsampling_depth: 5
     win: 640
     stride: 160
-    num_sources: 2
+    num_sources: 1
 
 # Loss config
 loss:
   train:
     loss_func: PITLossWrapper
-    sdr_type: pairwise_neg_snr
+    sdr_type: pairwise_neg_se_sisdr #pairwise_neg_snr
     config:
       pit_from: pw_mtx
       threshold_byloss: false
   val:
     loss_func: PITLossWrapper
-    sdr_type: pairwise_neg_sisdr
+    sdr_type: pairwise_neg_se_sisdr #pairwise_neg_sisdr
     config:
       pit_from: pw_mtx
       threshold_byloss: false
 
 # Training config
 training:
-  system: AudioLightningModule
+  system: AudioLightningModuleECHI
   gpus: [0]
   parallel: ddp
   epochs: 500
   early_stop:
-    monitor: val_loss/dataloader_idx_0
+    monitor: val_loss
     mode: min
     patience: 20
     verbose: true
   SpeedAug: False
-  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER2-on-EchoSet/epoch=159.ckpt
+  ckpt_path: Null # Null if training from scratch
   checkpoint:
-    monitor: "val_loss/dataloader_idx_0"
+    monitor: "val_loss"
     mode: "min"
     save_top_k: 5
     save_last: true
     verbose: true
 
+
 # Optim config
 optimizer:
   optim_name: adam
-  lr: 0.001
+  lr: 0.001 #original lr=0.001, try smaller lr
   weight_decay: 0
 
 # Sche config
@@ -61,19 +62,19 @@ scheduler:
 
 # Data config
 datamodule:
-  data_name: EchoSetDataModule
-  data_config:
-    train_dir: /data/public/EchoSet/train
-    valid_dir: /data/public/EchoSet/val
-    test_dir: /data/public/EchoSet/test
-    n_src: 2
+  data_name: ECHIDataModule
+  data_config: #important: add the path to the Preprocessed dataset where the json files are located
+    train_dir: /no_backups/s1495/Processed_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
+    n_src: 4
     sample_rate: 16000
     segment: 3.0
-    normalize_audio: false
-    batch_size: 5 #1
+    #normalize_audio: false
+    batch_size: 4
     num_workers: 8
     pin_memory: true
     persistent_workers: false
 
 exp:
-  exp_name: CausalTIGER2-on-EchoSet
+  exp_name: TSE-TIGER-on-ECHI
