@@ -14,6 +14,7 @@ from .complex_utils import is_complex, is_torch_complex_tensor, new_complex_like
 from .get_layer_from_string import get_layer
 from .inversible_interface import InversibleInterface
 from .nets_utils import make_pad_mask
+from .speaker_embedding_utils import build_spk_table_from_pt
 
 __all__ = [
     "STFT",
@@ -38,4 +39,5 @@ __all__ = [
     "get_layer",
     "InversibleInterface",
     "make_pad_mask",
+    "build_spk_table_from_pt"
 ]

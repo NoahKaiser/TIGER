@@ -67,6 +67,7 @@ datamodule:
     train_dir: /no_backups/s1495/Processed_ECHI/ha/train
     valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
     test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
+    spk_emb_path: /path/to/spk_emb_ecapa.pt #
     n_src: 4
     sample_rate: 16000
     segment: 3.0

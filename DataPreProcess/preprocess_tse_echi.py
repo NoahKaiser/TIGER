@@ -516,7 +516,7 @@ def main() -> None:
     if not echi_root.is_dir():
         raise NotADirectoryError(f"ECHI root directory not found: {echi_root}")
 
-    processed_root = Path(args.output_root) / "Processed_ECHI"
+    processed_root = Path(args.output_root) / "Processed_TSE_ECHI"
     processed_root.mkdir(parents=True, exist_ok=True)
 
     fix_len_to_ref = not args.no_fix_len_to_ref

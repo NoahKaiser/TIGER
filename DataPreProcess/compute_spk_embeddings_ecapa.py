@@ -6,8 +6,11 @@ Compute SpeechBrain ECAPA-TDNN speaker embeddings from raw .wav references.
 
 Two input modes:
   1) --mode files:
-       --in_dir contains wav files (non-recursive) OR pass explicit --wav_list
-       Output: dict[file_stem -> embedding]
+       - If --in_dir contains wav files directly: embed each wav (non-recursive).
+       - If --in_dir contains subfolders (e.g., train/dev/eval): auto-scan recursively for *.wav.
+       Output: dict[speaker_id -> embedding]
+       (speaker_id is derived from filename stem, e.g., P005 from P005.wav)
+
   2) --mode speakers:
        --in_dir contains subfolders (one per speaker), each with wav files
        Output: dict[speaker_id -> prototype_embedding]
@@ -15,18 +18,19 @@ Two input modes:
 Embeddings can be computed either from whole utterances (--whole_utt) or by
 chunking and averaging chunk embeddings (default).
 
-Dependencies:
-  pip install speechbrain torchaudio soundfile torch
-
-Example:
-  python compute_spk_embeddings_ecapa.py --mode speakers --in_dir ref_root --out_dir out_ecapa --device cuda
-  python compute_spk_embeddings_ecapa.py --mode files --in_dir wavs --out_dir out_ecapa --whole_utt
+Example (your participant folder with train/dev/eval):
+  uv run --extra=cu118 DataPreProcess/compute_spk_embeddings_ecapa.py \
+    --mode files \
+    --in_dir /data/public/CHiME9/participant \
+    --out_dir /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings \
+    --device cuda
 """
 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union, DefaultDict
+from collections import defaultdict
 
 import torch
 import torchaudio
@@ -58,7 +62,9 @@ def load_wav_mono(path: Path) -> Tuple[torch.Tensor, int]:
         return wav, sr
 
 
-def resample_if_needed(wav: torch.Tensor, sr: int, target_sr: int, resamplers: dict) -> torch.Tensor:
+def resample_if_needed(
+    wav: torch.Tensor, sr: int, target_sr: int, resamplers: dict
+) -> torch.Tensor:
     """
     wav: [1, T]
     """
@@ -123,8 +129,8 @@ def embed_from_wavs(
             batch = wav  # [1, T]
             wav_lens = None
         else:
-            batch = chunk_waveform(wav, TARGET_SR, chunk_sec, hop_sec)  # [N, chunk_T] (or [1, chunk_T])
-            wav_lens = None  # fixed-size chunks, so not needed
+            batch = chunk_waveform(wav, TARGET_SR, chunk_sec, hop_sec)  # [N, chunk_T] or [1, chunk_T]
+            wav_lens = None
 
         batch = batch.to(device)
         emb = classifier.encode_batch(batch, wav_lens=wav_lens, normalize=False)
@@ -149,27 +155,50 @@ def list_wavs_nonrecursive(in_dir: Path) -> List[Path]:
     return sorted([p for p in in_dir.iterdir() if p.is_file() and p.suffix.lower() == ".wav"])
 
 
+def list_wavs_recursive(in_dir: Path) -> List[Path]:
+    return sorted([p for p in in_dir.rglob("*.wav") if p.is_file()])
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["files", "speakers"], required=True,
-                    help="files: embed each wav. speakers: embed per subfolder speaker_id/")
+    ap.add_argument(
+        "--mode",
+        choices=["files", "speakers"],
+        required=True,
+        help="files: embed each wav (auto-recursive if needed). speakers: embed per subfolder speaker_id/",
+    )
     ap.add_argument("--in_dir", type=str, required=True, help="Input directory.")
     ap.add_argument("--out_dir", type=str, required=True, help="Output directory.")
-    ap.add_argument("--wav_list", type=str, default=None,
-                    help="Optional text file listing wav paths (one per line). Only used in --mode files.")
+    ap.add_argument(
+        "--wav_list",
+        type=str,
+        default=None,
+        help="Optional text file listing wav paths (one per line). Only used in --mode files.",
+    )
     ap.add_argument("--device", type=str, default=("cuda" if torch.cuda.is_available() else "cpu"))
     ap.add_argument("--model_source", type=str, default="speechbrain/spkrec-ecapa-voxceleb")
-    ap.add_argument("--whole_utt", action="store_true",
-                    help="If set, embed whole utterance (no chunking).")
+    ap.add_argument("--whole_utt", action="store_true", help="If set, embed whole utterance (no chunking).")
     ap.add_argument("--chunk_sec", type=float, default=2.0)
     ap.add_argument("--hop_sec", type=float, default=1.0)
-    ap.add_argument("--normalize_chunks", action="store_true",
-                    help="If set, L2-normalize each chunk embedding before averaging.")
+    ap.add_argument(
+        "--normalize_chunks",
+        action="store_true",
+        help="If set, L2-normalize each chunk embedding before averaging.",
+    )
+    ap.add_argument(
+        "--out_name",
+        type=str,
+        default="ecapa_embeddings.pt",
+        help="Output filename for embeddings (default: ecapa_embeddings.pt).",
+    )
     args = ap.parse_args()
 
     in_dir = Path(args.in_dir)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if not in_dir.exists():
+        raise FileNotFoundError(f"Input directory not found: {in_dir}")
 
     # Load pretrained ECAPA model
     from speechbrain.inference.speaker import EncoderClassifier
@@ -179,11 +208,13 @@ def main():
         run_opts={"device": args.device},
     )
 
-    out: Dict[str, torch.Tensor] = {}
+    # We may see the same PXXX across splits; accumulate then average.
+    accum: DefaultDict[str, List[torch.Tensor]] = defaultdict(list)
+    provenance: DefaultDict[str, List[str]] = defaultdict(list)
 
     if args.mode == "files":
         if args.wav_list is not None:
-            wav_paths = []
+            wav_paths: List[Path] = []
             with open(args.wav_list, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
@@ -191,22 +222,28 @@ def main():
                         wav_paths.append(Path(line))
             wav_paths = [p for p in wav_paths if p.exists()]
         else:
+            # Try non-recursive first; if empty, fallback to recursive (train/dev/eval layout)
             wav_paths = list_wavs_nonrecursive(in_dir)
+            if not wav_paths:
+                wav_paths = list_wavs_recursive(in_dir)
 
         if not wav_paths:
-            raise RuntimeError("No wav files found (mode=files).")
+            raise RuntimeError(f"No wav files found in: {in_dir} (mode=files).")
 
         for p in wav_paths:
-            key = p.stem
+            spk_id = p.stem  # expects PXXX.wav
             emb = embed_from_wavs(
-                [p], classifier, args.device,
+                [p],
+                classifier,
+                args.device,
                 whole_utt=args.whole_utt,
                 chunk_sec=args.chunk_sec,
                 hop_sec=args.hop_sec,
                 normalize_chunks=args.normalize_chunks,
             )
-            out[key] = emb
-            print(f"[OK] {key}: D={emb.numel()}")
+            accum[spk_id].append(emb)
+            provenance[spk_id].append(str(p))
+            print(f"[OK] {spk_id}: D={emb.numel()} from {p}")
 
     else:  # speakers
         spk_dirs = sorted([p for p in in_dir.iterdir() if p.is_dir()])
@@ -220,21 +257,36 @@ def main():
                 continue
 
             emb = embed_from_wavs(
-                wavs, classifier, args.device,
+                wavs,
+                classifier,
+                args.device,
                 whole_utt=args.whole_utt,
                 chunk_sec=args.chunk_sec,
                 hop_sec=args.hop_sec,
                 normalize_chunks=args.normalize_chunks,
             )
-            out[spk_dir.name] = emb
+            accum[spk_dir.name].append(emb)
+            provenance[spk_dir.name].extend([str(w) for w in wavs])
             print(f"[OK] {spk_dir.name}: D={emb.numel()} from {len(wavs)} wav(s)")
 
-        if not out:
+        if not accum:
             raise RuntimeError("No speaker embeddings computed.")
 
-    # Save outputs
-    torch.save(out, out_dir / "ecapa_embeddings.pt")
+    # Finalize: average duplicates and L2-normalize
+    out: Dict[str, torch.Tensor] = {}
+    num_dupe = 0
+    for spk_id, embs in accum.items():
+        if len(embs) > 1:
+            num_dupe += 1
+        proto = torch.stack(embs, dim=0).mean(dim=0)
+        out[spk_id] = l2_normalize(proto)
 
+    # Save outputs
+    out_path = out_dir / args.out_name
+    torch.save(out, out_path)
+
+    # Metadata
+    any_emb = next(iter(out.values()))
     meta = {
         "backend": "speechbrain",
         "model_source": args.model_source,
@@ -244,14 +296,20 @@ def main():
         "chunk_sec": float(args.chunk_sec),
         "hop_sec": float(args.hop_sec),
         "normalize_chunks": bool(args.normalize_chunks),
-        "num_items": len(out),
-        "embedding_dim": int(next(iter(out.values())).numel()),
+        "input_root": str(in_dir.resolve()),
+        "num_speakers": int(len(out)),
+        "num_speakers_with_multiple_refs": int(num_dupe),
+        "num_reference_files_total": int(sum(len(v) for v in provenance.values())),
+        "embedding_dim": int(any_emb.numel()),
+        # Do NOT dump full provenance mapping here (could be large). Add if you really want it.
     }
-    with open(out_dir / "ecapa_embeddings_meta.json", "w", encoding="utf-8") as f:
+    meta_path = out_dir / "ecapa_embeddings_meta.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
-    print(f"\nSaved: {out_dir / 'ecapa_embeddings.pt'}")
-    print(f"Saved: {out_dir / 'ecapa_embeddings_meta.json'}")
+    print(f"\nSaved: {out_path}")
+    print(f"Saved: {meta_path}")
+    print(f"Speakers: {len(out)} | Speakers with multiple refs: {num_dupe}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=Train-CausalTIGER2_fromCheckpoint159
+#SBATCH --job-name=DataPreProcessTSE-ECHI
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -9,7 +9,7 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse19
+#SBATCH --nodelist=linse20
 
 
 
@@ -17,7 +17,9 @@
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_test.yml
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
-#uv run --extra=cu118 DataPreProcess/process_echi_old.py --in_dir /data/public/CHiME9 --out_dir out
+#uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
+                                                             # --output_root /no_backups/s1495 \
+                                                             # --device ha
 
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger2.yml
@@ -41,5 +43,5 @@
 #uv run --extra=cu118 Listen_to_ECHIDataset.py --json_dir /no_backups/s1495/Processed_ECHI/ha/train \
     #--out_dir  /no_backups/s1495/Listen_to_ECHIDataset/batch01 \
     #--n 100 --n_src 4 --sr 16000 --segment 3.0 --start_idx 0
-#uv run --extra=cu118 compute_spk_embeddings_ecapa.py --mode files --in_dir /data/public/CHiME9/participant/train --out_dir /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/train --device cuda
-#uv run --extra=cpu inspect_ECAPA_Embeddings.py --emb_pt /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/train/ecapa_embeddings.pt --meta_json /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/train/ecapa_embeddings_meta.json
+#uv run --extra=cu118 DataPreProcess/compute_spk_embeddings_ecapa.py --mode files --in_dir /data/public/CHiME9/participant --out_dir /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings --device cuda
+uv run --extra=cpu inspect_ECAPA_Embeddings.py --emb_pt /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt --meta_json /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings_meta.json
