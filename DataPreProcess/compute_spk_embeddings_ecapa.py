@@ -114,6 +114,7 @@ def embed_from_wavs(
     chunk_sec: float,
     hop_sec: float,
     normalize_chunks: bool,
+    max_chunk_batch: int,
 ) -> torch.Tensor:
     """
     Returns a single embedding (prototype) for the provided wav_paths.
@@ -126,24 +127,30 @@ def embed_from_wavs(
         wav = resample_if_needed(wav, sr, TARGET_SR, resamplers)
 
         if whole_utt:
-            batch = wav  # [1, T]
-            wav_lens = None
+            batches = [wav]  # [1, T]
         else:
-            batch = chunk_waveform(wav, TARGET_SR, chunk_sec, hop_sec)  # [N, chunk_T] or [1, chunk_T]
-            wav_lens = None
+            chunks = chunk_waveform(wav, TARGET_SR, chunk_sec, hop_sec)  # [N, chunk_T] or [1, chunk_T]
+            if max_chunk_batch > 0 and chunks.shape[0] > max_chunk_batch:
+                batches = [
+                    chunks[i : i + max_chunk_batch]
+                    for i in range(0, chunks.shape[0], max_chunk_batch)
+                ]
+            else:
+                batches = [chunks]
 
-        batch = batch.to(device)
-        emb = classifier.encode_batch(batch, wav_lens=wav_lens, normalize=False)
+        for batch in batches:
+            batch = batch.to(device)
+            emb = classifier.encode_batch(batch, wav_lens=None, normalize=False)
 
-        # SpeechBrain versions may return [B, 1, D] or [B, D]; make it [B, D]
-        if emb.ndim == 3:
-            emb = emb.squeeze(1)
-        emb = emb.float().detach().cpu()  # [B, D]
+            # SpeechBrain versions may return [B, 1, D] or [B, D]; make it [B, D]
+            if emb.ndim == 3:
+                emb = emb.squeeze(1)
+            emb = emb.float().detach().cpu()  # [B, D]
 
-        if normalize_chunks:
-            emb = l2_normalize(emb)
+            if normalize_chunks:
+                emb = l2_normalize(emb)
 
-        embs.append(emb)
+            embs.append(emb)
 
     embs = torch.cat(embs, dim=0)  # [N_total, D]
     proto = embs.mean(dim=0)       # [D]
@@ -184,6 +191,12 @@ def main():
         "--normalize_chunks",
         action="store_true",
         help="If set, L2-normalize each chunk embedding before averaging.",
+    )
+    ap.add_argument(
+        "--max_chunk_batch",
+        type=int,
+        default=128,
+        help="Maximum number of chunks per encoder forward call in chunk mode (0 = all at once).",
     )
     ap.add_argument(
         "--out_name",
@@ -240,6 +253,7 @@ def main():
                 chunk_sec=args.chunk_sec,
                 hop_sec=args.hop_sec,
                 normalize_chunks=args.normalize_chunks,
+                max_chunk_batch=args.max_chunk_batch,
             )
             accum[spk_id].append(emb)
             provenance[spk_id].append(str(p))
@@ -264,6 +278,7 @@ def main():
                 chunk_sec=args.chunk_sec,
                 hop_sec=args.hop_sec,
                 normalize_chunks=args.normalize_chunks,
+                max_chunk_batch=args.max_chunk_batch,
             )
             accum[spk_dir.name].append(emb)
             provenance[spk_dir.name].extend([str(w) for w in wavs])

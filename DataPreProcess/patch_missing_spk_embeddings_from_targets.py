@@ -124,6 +124,7 @@ def run_compute_missing_embeddings(
     chunk_sec: float,
     hop_sec: float,
     normalize_chunks: bool,
+    max_chunk_batch: int,
 ) -> Path:
     if not compute_script.is_file():
         raise FileNotFoundError(f"compute_spk_embeddings_ecapa.py not found: {compute_script}")
@@ -149,6 +150,8 @@ def run_compute_missing_embeddings(
         str(chunk_sec),
         "--hop_sec",
         str(hop_sec),
+        "--max_chunk_batch",
+        str(max_chunk_batch),
     ]
     if whole_utt:
         cmd.append("--whole_utt")
@@ -259,6 +262,12 @@ def main() -> None:
     parser.add_argument("--hop_sec", type=float, default=1.0)
     parser.add_argument("--normalize_chunks", action="store_true")
     parser.add_argument(
+        "--max_chunk_batch",
+        type=int,
+        default=128,
+        help="Pass through to ECAPA compute script (0 = all chunks at once).",
+    )
+    parser.add_argument(
         "--dry_run",
         action="store_true",
         help="Only report missing IDs and available target refs; do not compute or write outputs.",
@@ -331,6 +340,7 @@ def main() -> None:
         chunk_sec=float(args.chunk_sec),
         hop_sec=float(args.hop_sec),
         normalize_chunks=bool(args.normalize_chunks),
+        max_chunk_batch=int(args.max_chunk_batch),
     )
 
     add_emb = load_emb_dict(missing_emb_pt)
