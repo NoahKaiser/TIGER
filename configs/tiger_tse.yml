@@ -15,11 +15,11 @@ audionet:
 loss:
   train:
     loss_func: null #no PIT loss for TSE necessary
-    sdr_type: pairwise_neg_se_sisdr #use pairwise_neg_sisdr for always present target , pairwise_neg_se_sisdr for possible silent target speaker
+    sdr_type: pairwise_neg_sisdr #use pairwise_neg_sisdr for always present target , pairwise_neg_se_sisdr for possible silent target speaker
     config: {}
   val:
     loss_func: null #no PIT loss for TSE necessary
-    sdr_type: pairwise_neg_se_sisdr #use pairwise_neg_sisdr for always present target speaker, pairwise_neg_se_sisdr for possible silent target speaker
+    sdr_type: pairwise_neg_sisdr #use pairwise_neg_sisdr for always present target speaker, pairwise_neg_se_sisdr for possible silent target speaker
     config: {}
 
 # Training config
@@ -80,4 +80,4 @@ datamodule:
   #path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
   #sort_ids: true
 exp:
-  exp_name: TSE-TIGER-on-ECHI_Test
+  exp_name: TSE-TIGER-on-ECHI_only_valid_speech_regions

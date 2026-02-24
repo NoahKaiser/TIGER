@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=verify_tse_spk_id_alignment
+#SBATCH --job-name=Train_TSE_TIGER_ECHI_only_valid_speech_regions
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
