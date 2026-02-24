@@ -208,6 +208,86 @@ Reference: https://www.chimechallenge.org/current/task2/data
   - `--device`, `--model_source`, `--whole_utt`, `--chunk_sec`, `--hop_sec`, `--normalize_chunks`, `--out_name`
   - `--wav_list` (only in `files` mode; one wav path per line)
 
+## Implemented Description: `verify_tse_spk_id_alignment.py`
+`DataPreProcess/verify_tse_spk_id_alignment.py` verifies that speaker IDs used in TSE target manifests are covered by the ECAPA embedding table.
+
+### Purpose
+- Detect whether any speaker IDs in `target_pos*.json` are missing from embedding `.pt` keys.
+- Distinguish between:
+  - true missing IDs
+  - formatting-only mismatches (for example `p24` vs `P024`)
+
+### Inputs and parsing
+- Reads `target_pos*.json` from one or more `--split_dir` paths (repeatable flag).
+- Expects each target row to be at least:
+  - `[target_path, spk_id, ...]`
+- Loads `--emb_pt` as a non-empty dict:
+  - `spk_id -> embedding_tensor`
+
+### Canonicalization rule
+- Uses `canon(...)` to normalize IDs that match `p0*(\d+)` (case-insensitive) into:
+  - `P###` (3-digit uppercase, zero-padded)
+- Example:
+  - `p24`, `P24`, `P024` -> `P024`
+
+### Reported checks
+- `target_ids`: unique IDs from manifests.
+- `emb_ids`: unique keys from `.pt`.
+- `missing_raw`: `target_ids - emb_ids` without normalization.
+- `missing_after_canonicalization`: same difference after applying `canon(...)`.
+- Also prints:
+  - number of manifest files scanned
+  - sample embedding keys
+
+### Behavior notes
+- Read-only utility: no files are modified.
+- Fails fast on missing directories/files or malformed manifest rows.
+
+## Implemented Description: `patch_missing_spk_embeddings_from_targets.py`
+`DataPreProcess/patch_missing_spk_embeddings_from_targets.py` fills missing speaker entries in an existing embedding `.pt` by re-embedding target wavs referenced by TSE manifests.
+
+### Purpose
+- Patch missing speaker IDs after verifying manifest-vs-embedding mismatch.
+- Reuses target reference audio already listed in `target_pos*.json`.
+
+### End-to-end workflow
+1. Scan `target_pos*.json` from all provided `--split_dir` paths and build:
+   - `spk_id -> set(target_wav_paths)`
+2. Load base embeddings (`--emb_pt`) and find:
+   - `missing_ids = target_ids - emb_ids`
+3. Build temporary per-speaker reference tree:
+   - `<work_dir>/refs_by_speaker/<spk_id>/*.wav`
+   - implemented as symlinks to original target wavs
+4. Run `compute_spk_embeddings_ecapa.py` in `--mode speakers` on that tree to produce missing-only embeddings.
+5. Validate all missing IDs were generated.
+6. Merge missing embeddings into base dict and write output.
+
+### Temporary reference-tree details
+- Symlink names are deterministic (`{index}__{parent}__{name}`) to avoid basename collisions.
+- Optional `--max_refs_per_speaker` limits references used per missing speaker (`0` means all).
+- Missing target wav paths are counted and reported per speaker.
+
+### Output and write modes
+- Missing-only embeddings are written to:
+  - `<work_dir>/missing_embeddings/<missing_out_name>`
+- Final merged output:
+  - default: `<emb_pt_stem>_merged.pt`
+  - `--merged_out`: custom path
+  - `--inplace`: overwrite `--emb_pt` after writing backup (`--backup_suffix`, default `.bak`)
+
+### Safety and validation behavior
+- If no IDs are missing, script exits without changes.
+- Refuses merge if newly computed IDs overlap with existing base keys.
+- Fails when any missing speaker has zero usable target refs.
+- Fails if any missing ID remains unresolved after embedding computation.
+- `--dry_run` reports missing IDs and ref availability but skips compute/merge writes.
+
+### ECAPA compute passthrough options
+- For missing-ID embedding computation, forwards key options to `compute_spk_embeddings_ecapa.py`:
+  - `--device`, `--model_source`
+  - `--whole_utt` or chunk mode (`--chunk_sec`, `--hop_sec`, `--normalize_chunks`)
+  - `--max_chunk_batch`
+
 ## Speaker Embedding Flow (Current TSE Runtime)
 
 This section describes how speaker embeddings are made available to the model when using:
