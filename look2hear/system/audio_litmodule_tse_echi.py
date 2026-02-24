@@ -92,13 +92,20 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
         spk_emb = F.embedding(spk_idx, self.spk_table)  # [B,d]
         return self.audio_model(wav, spk_emb=spk_emb)
 
+    @staticmethod
+    def _ensure_scalar_loss(loss: torch.Tensor) -> torch.Tensor:
+        # Allow direct pairwise losses (e.g., [B,1,1]) when PIT is disabled.
+        if isinstance(loss, torch.Tensor) and loss.ndim > 0:
+            return loss.mean()
+        return loss
+
     def training_step(self, batch, batch_nb):
         mixtures, target, spk_idx, _utt_id = batch  # target: [B,T]
         # Ensure target shape matches model output for num_sources=1
         targets = target.unsqueeze(1)  # [B,1,T]
 
         est = self(mixtures, spk_idx)  # expected [B,1,T] if TIGER num_sources=1
-        loss = self.loss_func["train"](est, targets)
+        loss = self._ensure_scalar_loss(self.loss_func["train"](est, targets))
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True, logger=True)
         return {"loss": loss}
@@ -108,7 +115,7 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
         targets = target.unsqueeze(1)  # [B,1,T]
 
         est = self(mixtures, spk_idx)
-        loss = self.loss_func["val"](est, targets)
+        loss = self._ensure_scalar_loss(self.loss_func["val"](est, targets))
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True, logger=True)
         self.validation_step_outputs.append(loss)
