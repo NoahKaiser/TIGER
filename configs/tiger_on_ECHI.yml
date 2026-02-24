@@ -9,7 +9,7 @@ audionet:
     upsampling_depth: 5
     win: 640
     stride: 160
-    num_sources: 4
+    num_sources: 1
 
 # Loss config
 loss:

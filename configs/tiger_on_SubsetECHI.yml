@@ -1,7 +1,7 @@
 #Copy of tiger-small.yml
 # Network config
 audionet:
-  audionet_name: TIGER
+  audionet_name: TSE_TIGER
   audionet_config:
     out_channels: 128
     in_channels: 256
@@ -71,10 +71,10 @@ datamodule:
     sample_rate: 16000
     segment: 3.0
     #normalize_audio: false
-    batch_size: 4
+    batch_size: 1
     num_workers: 8
     pin_memory: true
     persistent_workers: false
 
 exp:
-  exp_name: TIGER-small-on-Subset-ECHI
+  exp_name: TIGER_TSE_on_Subset-ECHI_

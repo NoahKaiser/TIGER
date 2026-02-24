@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=DataPreProcessTSE-ECHI
+#SBATCH --job-name=TSE_TIGER_on_SubsetECHI
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -14,7 +14,7 @@
 
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
-#uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_test.yml
+uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_SubsetECHI.yml
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
@@ -43,5 +43,5 @@
 #uv run --extra=cu118 Listen_to_ECHIDataset.py --json_dir /no_backups/s1495/Processed_ECHI/ha/train \
     #--out_dir  /no_backups/s1495/Listen_to_ECHIDataset/batch01 \
     #--n 100 --n_src 4 --sr 16000 --segment 3.0 --start_idx 0
-#uv run --extra=cu118 DataPreProcess/compute_spk_embeddings_ecapa.py --mode files --in_dir /data/public/CHiME9/participant --out_dir /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings --device cuda
-uv run --extra=cpu inspect_ECAPA_Embeddings.py --emb_pt /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt --meta_json /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings_meta.json
+
+#uv run --extra=cpu inspect_ECAPA_Embeddings.py --emb_pt /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt --meta_json /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings_meta.json

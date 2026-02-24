@@ -59,7 +59,7 @@ def main(config):
     print_only(
         "Instantiating Subset datamodule of <{}>".format(config["datamodule"]["data_name"])
     )
-    train_idx = [20,21,22,23]
+    train_idx = [20]
     val_idx = [20]
 
     base_dm = getattr(look2hear.datas, config["datamodule"]["data_name"])(**config["datamodule"]["data_config"])
