@@ -6,7 +6,11 @@ import torch.nn.functional as F
 import math
 from .base_model import BaseModel
 from ..layers import activations, normalizations
-
+"""
+Adjustements for Target Speaker Extraction (TSE)-TIGER:
+1) make TSE_TIGER accept speaker embedding (spk_emb)
+2) deleted block with force-mask-to-one for mixture consistency -> not valid for TSE and ECHI dataset
+"""
 
 def GlobLN(nOut):
     return nn.GroupNorm(1, nOut, eps=1e-8)
@@ -626,11 +630,8 @@ class TSE_TIGER(BaseModel):
             this_mask = this_output[:,0] * torch.sigmoid(this_output[:,1])  # B*nch, 2, K, BW, T
             this_mask_real = this_mask[:,0]  # B*nch, K, BW, T
             this_mask_imag = this_mask[:,1]  # B*nch, K, BW, T
-            # force mask sum to 1
-            this_mask_real_sum = this_mask_real.sum(1).unsqueeze(1)  # B*nch, 1, BW, T
-            this_mask_imag_sum = this_mask_imag.sum(1).unsqueeze(1)  # B*nch, 1, BW, T
-            this_mask_real = this_mask_real - (this_mask_real_sum - 1) / self.num_output
-            this_mask_imag = this_mask_imag - this_mask_imag_sum / self.num_output
+            # deleted the force mask sum to 1 for mixture constraint of baseline TIGER -> not usefull for TSE
+
             est_spec_real = subband_spec[i].real.unsqueeze(1) * this_mask_real - subband_spec[i].imag.unsqueeze(1) * this_mask_imag  # B*nch, K, BW, T
             est_spec_imag = subband_spec[i].real.unsqueeze(1) * this_mask_imag + subband_spec[i].imag.unsqueeze(1) * this_mask_real  # B*nch, K, BW, T
             sep_subband_spec.append(torch.complex(est_spec_real, est_spec_imag))
