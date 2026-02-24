@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=patch_missing_spk_embeddings_from_targets
+#SBATCH --job-name=verify_tse_spk_id_alignment
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -14,14 +14,17 @@
 
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
-#uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse.yml
+uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse.yml
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
                                                              # --output_root /no_backups/s1495 \
                                                              # --device ha
 #uv run --extra=cpu DataPreProcess/verify_tse_spk_id_alignment.py
-uv run --extra=cpu DataPreProcess/patch_missing_spk_embeddings_from_targets.py --inplace
+#uv run --extra=cu118 DataPreProcess/patch_missing_spk_embeddings_from_targets.py --inplace \
+ # --device cuda \
+  #--max_refs_per_speaker 1 \
+  #--max_chunk_batch 32
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger2.yml
 #uv run --extra=cu118 audio_test_EchoSet.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/conf.yml --save_dir /no_backups/s1495/TIGER/CausalTIGER_on_EchoSet
