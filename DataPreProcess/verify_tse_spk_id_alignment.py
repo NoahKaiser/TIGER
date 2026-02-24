@@ -89,7 +89,7 @@ def main() -> None:
     parser.add_argument(
         "--show",
         type=int,
-        default=20,
+        default=100,
         help="How many IDs to print from each mismatch list.",
     )
     args = parser.parse_args()
