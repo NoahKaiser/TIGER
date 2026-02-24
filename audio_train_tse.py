@@ -48,6 +48,88 @@ parser.add_argument(
 )
 
 
+def _target_manifest_paths(split_dir: Path, n_src: int):
+    return [split_dir / f"target_pos{pos}.json" for pos in range(1, n_src + 1)]
+
+
+def _collect_target_ids_from_split(split_name: str, split_dir: Path, n_src: int):
+    if not split_dir.is_dir():
+        raise NotADirectoryError(f"{split_name} split directory not found: {split_dir}")
+
+    missing = [p for p in _target_manifest_paths(split_dir, n_src) if not p.is_file()]
+    if missing:
+        missing_str = ", ".join(str(p) for p in missing)
+        raise FileNotFoundError(
+            f"{split_name} split is missing required target manifests for n_src={n_src}: {missing_str}"
+        )
+
+    out = set()
+    for p in _target_manifest_paths(split_dir, n_src):
+        rows = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(rows, list):
+            raise ValueError(f"{p} must contain a JSON list.")
+        for row in rows:
+            if not (isinstance(row, list) and len(row) >= 2):
+                raise ValueError(
+                    f"Invalid row in {p}: expected at least [path, spk_id, ...], got {row}"
+                )
+            out.add(str(row[1]).strip())
+    return out
+
+
+def run_tse_preflight_speaker_check(data_cfg: dict) -> None:
+    """
+    Fast fail if speaker IDs in target manifests are missing from spk_emb_path.
+    Controlled by datamodule.data_config.verify_spk_alignment (default: True).
+    """
+    if not bool(data_cfg.get("verify_spk_alignment", True)):
+        print_only("Skipping TSE speaker-id preflight (verify_spk_alignment=False).")
+        return
+
+    n_src = int(data_cfg.get("n_src", 4))
+    has_test_targets = bool(data_cfg.get("has_test_targets", True))
+    spk_emb_path = Path(str(data_cfg["spk_emb_path"]))
+
+    if not spk_emb_path.is_file():
+        raise FileNotFoundError(f"Speaker embedding file not found: {spk_emb_path}")
+
+    split_specs = [
+        ("train", Path(str(data_cfg["train_dir"]))),
+        ("valid", Path(str(data_cfg["valid_dir"]))),
+    ]
+    if has_test_targets:
+        split_specs.append(("test", Path(str(data_cfg["test_dir"]))))
+
+    target_ids = set()
+    for split_name, split_dir in split_specs:
+        target_ids |= _collect_target_ids_from_split(split_name, split_dir, n_src)
+
+    obj = torch.load(str(spk_emb_path), map_location="cpu")
+    if not isinstance(obj, dict) or not obj:
+        raise ValueError(
+            f"{spk_emb_path} must contain a non-empty dict mapping spk_id->embedding, got: {type(obj)}"
+        )
+    emb_ids = {str(k) for k in obj.keys()}
+    missing = sorted(target_ids - emb_ids)
+    if missing:
+        preview = missing[:20]
+        raise RuntimeError(
+            "TSE speaker-id preflight failed: "
+            f"{len(missing)} speaker IDs are in target manifests but missing in {spk_emb_path}. "
+            f"Examples: {preview}. "
+            "Use DataPreProcess/verify_tse_spk_id_alignment.py and "
+            "DataPreProcess/patch_missing_spk_embeddings_from_targets.py."
+        )
+
+    print_only(
+        "TSE speaker-id preflight passed: target_ids={}, emb_ids={}, checked_splits={}.".format(
+            len(target_ids),
+            len(emb_ids),
+            [name for name, _ in split_specs],
+        )
+    )
+
+
 def build_loss_from_config(loss_cfg):
     sdr_obj = getattr(look2hear.losses, loss_cfg["sdr_type"])
     loss_name = loss_cfg.get("loss_func", None)
@@ -62,15 +144,19 @@ def build_loss_from_config(loss_cfg):
 
 
 def main(config):
+    run_tse_preflight_speaker_check(config["datamodule"]["data_config"])
+
     print_only(
         "Instantiating datamodule <{}>".format(config["datamodule"]["data_name"])
     )
     datamodule: object = getattr(look2hear.datas, config["datamodule"]["data_name"])(
         **config["datamodule"]["data_config"]
     )
-    datamodule.setup()
+    datamodule.setup(stage="fit")
 
-    train_loader, val_loader, test_loader = datamodule.make_loader
+    train_loader = datamodule.train_dataloader()
+    val_loader = datamodule.val_dataloader()
+    test_loader = None
     
     # Define model and optimizer
     print_only(

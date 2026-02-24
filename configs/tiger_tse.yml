@@ -63,7 +63,9 @@ datamodule:
     train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
     valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
     test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    has_test_targets: false # true-eval has no target_pos*.json; keep false for fit-only training
     spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+    verify_spk_alignment: true # preflight check: target manifest spk_ids must exist in spk_emb_path
     n_src: 4 # dataset target positions to sample from (pos1..pos4), not model output sources
     sample_rate: 16000
     segment: 3.0

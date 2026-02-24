@@ -27,6 +27,7 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
       - lookup speaker embedding table and pass spk_emb into audio_model
       - audio_model must accept: audio_model(wav, spk_emb=...)
       - for first checkpoint, audio_model may ignore spk_emb
+      - test_loader is optional for fit-only workflows
     """
 
     def __init__(
@@ -164,6 +165,13 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
 
     def val_dataloader(self):
         return self.val_loader
+
+    def test_dataloader(self):
+        if self.test_loader is None:
+            raise RuntimeError(
+                "test_loader is not configured. This is expected for fit-only runs."
+            )
+        return self.test_loader
 
     def on_save_checkpoint(self, checkpoint):
         checkpoint["training_config"] = self.config

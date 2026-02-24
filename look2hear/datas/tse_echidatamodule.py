@@ -237,6 +237,8 @@ class TSE_ECHIDataModule(LightningDataModule):
         valid_dir: Union[str, Path],
         test_dir: Union[str, Path],
         spk_emb_path: Union[str, Path],
+        has_test_targets: bool = True,
+        verify_spk_alignment: bool = True,
         n_src: int = 4,
         sample_rate: int = 16000,
         segment: float = 3.0,
@@ -252,6 +254,9 @@ class TSE_ECHIDataModule(LightningDataModule):
         self.valid_dir = str(valid_dir)
         self.test_dir = str(test_dir)
         self.spk_emb_path = str(spk_emb_path)
+        self.has_test_targets = bool(has_test_targets)
+        # Kept for config compatibility; preflight is executed in audio_train_tse.py.
+        self.verify_spk_alignment = bool(verify_spk_alignment)
 
         self.n_src = int(n_src)
         self.sample_rate = int(sample_rate)
@@ -268,45 +273,65 @@ class TSE_ECHIDataModule(LightningDataModule):
         self.data_val: Optional[TSE_ECHIDataset] = None
         self.data_test: Optional[TSE_ECHIDataset] = None
 
+    def _missing_target_manifests(self, json_dir: Union[str, Path]) -> List[Path]:
+        base = Path(json_dir)
+        missing: List[Path] = []
+        for pos in range(1, self.n_src + 1):
+            p = base / f"target_pos{pos}.json"
+            if not p.is_file():
+                missing.append(p)
+        return missing
+
+    def _build_dataset(self, split_name: str, json_dir: str, pad_last: bool) -> TSE_ECHIDataset:
+        mix_path = Path(json_dir) / "mix.json"
+        if not mix_path.is_file():
+            raise FileNotFoundError(
+                f"{split_name} split is missing mix manifest: {mix_path}"
+            )
+        missing = self._missing_target_manifests(json_dir)
+        if missing:
+            missing_str = ", ".join(str(p) for p in missing)
+            raise FileNotFoundError(
+                f"{split_name} split is missing required target manifests for n_src={self.n_src}: {missing_str}"
+            )
+        return TSE_ECHIDataset(
+            json_dir=json_dir,
+            spk2idx=self.spk2idx,
+            n_src=self.n_src,
+            sample_rate=self.sample_rate,
+            segment=self.segment,
+            hop=self.hop,
+            pad_last=pad_last,
+            utt_id_mode=self.utt_id_mode,
+        )
+
     def setup(self, stage: Optional[str] = None) -> None:
         # Build spk2idx (small) from .pt once per process
 
         spk2idx, _, _ = build_spk_table_from_pt(self.spk_emb_path, sort_ids=True)
         self.spk2idx = spk2idx
 
-        self.data_train = TSE_ECHIDataset(
-            json_dir=self.train_dir,
-            spk2idx=self.spk2idx,
-            n_src=self.n_src,
-            sample_rate=self.sample_rate,
-            segment=self.segment,
-            hop=self.hop,
-            pad_last=False,
-            utt_id_mode=self.utt_id_mode,
-        )
-        self.data_val = TSE_ECHIDataset(
-            json_dir=self.valid_dir,
-            spk2idx=self.spk2idx,
-            n_src=self.n_src,
-            sample_rate=self.sample_rate,
-            segment=self.segment,
-            hop=self.hop,
-            pad_last=True,
-            utt_id_mode=self.utt_id_mode,
-        )
-        self.data_test = TSE_ECHIDataset(
-            json_dir=self.test_dir,
-            spk2idx=self.spk2idx,
-            n_src=self.n_src,
-            sample_rate=self.sample_rate,
-            segment=self.segment,
-            hop=self.hop,
-            pad_last=True,
-            utt_id_mode=self.utt_id_mode,
-        )
+        stage = None if stage is None else str(stage).lower()
+        if stage in (None, "fit"):
+            self.data_train = self._build_dataset("train", self.train_dir, pad_last=False)
+            self.data_val = self._build_dataset("valid", self.valid_dir, pad_last=True)
+
+        if stage in (None, "validate"):
+            self.data_val = self._build_dataset("valid", self.valid_dir, pad_last=True)
+
+        if stage in (None, "test"):
+            if not self.has_test_targets:
+                if stage == "test":
+                    raise RuntimeError(
+                        "Requested setup(stage='test') but has_test_targets=False. "
+                        "Set has_test_targets=True and provide test target_pos*.json to run test."
+                    )
+                self.data_test = None
+            else:
+                self.data_test = self._build_dataset("test", self.test_dir, pad_last=True)
 
     def train_dataloader(self) -> DataLoader:
-        assert self.data_train is not None, "Call setup() first."
+        assert self.data_train is not None, "Call setup(stage='fit') first."
         return DataLoader(
             self.data_train,
             batch_size=self.batch_size,
@@ -318,7 +343,7 @@ class TSE_ECHIDataModule(LightningDataModule):
         )
 
     def val_dataloader(self) -> DataLoader:
-        assert self.data_val is not None, "Call setup() first."
+        assert self.data_val is not None, "Call setup(stage='fit' or 'validate') first."
         return DataLoader(
             self.data_val,
             batch_size=self.batch_size,
@@ -329,7 +354,7 @@ class TSE_ECHIDataModule(LightningDataModule):
         )
 
     def test_dataloader(self) -> DataLoader:
-        assert self.data_test is not None, "Call setup() first."
+        assert self.data_test is not None, "Call setup(stage='test') first and ensure test target_pos*.json exist."
         return DataLoader(
             self.data_test,
             batch_size=self.batch_size,
@@ -341,4 +366,5 @@ class TSE_ECHIDataModule(LightningDataModule):
 
     @property
     def make_loader(self):
-        return self.train_dataloader(), self.val_dataloader(), self.test_dataloader()
+        test_loader = self.test_dataloader() if self.data_test is not None else None
+        return self.train_dataloader(), self.val_dataloader(), test_loader
