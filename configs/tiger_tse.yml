@@ -69,6 +69,8 @@ datamodule:
     n_src: 4 # dataset target positions to sample from (pos1..pos4), not model output sources
     sample_rate: 16000
     segment: 3.0
+    only_valid_speech_region: false
+    valid_speech_metadata_root: null # required when only_valid_speech_region=true, e.g. /data/public/CHiME9/metadata/ref
     #normalize_audio: false
     batch_size: 4
     num_workers: 8
