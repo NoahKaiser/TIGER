@@ -80,4 +80,4 @@ datamodule:
   #path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
   #sort_ids: true
 exp:
-  exp_name: TSE-TIGER-on-ECHI_only_valid_speech_regions
+  exp_name: TSE-TIGER-FiLM1-ECHI_only_valid_speech_regions
