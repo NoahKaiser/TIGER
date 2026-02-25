@@ -149,7 +149,7 @@ Reference: https://www.chimechallenge.org/current/task2/data
   - `[abs_target_path, spk_id, num_samples]`
 
 ## Implemented Description: `compute_spk_embeddings_ecapa.py`
-`DataPreProcess/compute_spk_embeddings_ecapa.py` computes speaker embeddings using SpeechBrain ECAPA-TDNN and writes a `.pt` dictionary used by the TSE pipeline.
+`DataPreProcess/compute_spk_embeddings_ecapa.py` computes speaker embeddings using SpeechBrain ECAPA-TDNN (supervised deep speaker-verification embedding extraction (x-vector family)) and writes a `.pt` dictionary used by the TSE pipeline.
 
 ### Purpose
 - Build a mapping:
