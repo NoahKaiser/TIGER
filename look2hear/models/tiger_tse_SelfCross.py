@@ -12,9 +12,9 @@ Adjustements for Target Speaker Extraction (TSE)-TIGER:
 1) make TSE_TIGER accept speaker embedding (spk_emb)
 2) deleted block with force-mask-to-one for mixture consistency -> not valid for TSE and ECHI dataset
 
-NEW TSE_TIGER_Cross1(speaker conditioning via cross-attention): Cross1 uses only cross attention and replaces F3A self-attention!
+NEW TSE_TIGER_SelfCross(speaker conditioning via cross-attention): Serial Self and Cross Attention
 3) Speaker prompt tokens from spk_emb
-4) Replace F3A self-attention with speaker-speech cross-attention (mixture queries speaker memory) + residual + norm (norm kept outside as in baseline)
+4) Serial self-attention and speaker-speech cross-attention (mixture queries speaker memory) + residual + norm (norm kept outside as in baseline)
 """
 
 
@@ -629,20 +629,24 @@ class Recurrent(nn.Module):
             kernel_size: int = 8,
             stride: int = 1,
             _iter=4,
-            spk_token_dim: int = 128,
+            spk_token_dim: int = 128,  # NEW
     ):
         super().__init__()
         self.nband = nband
 
         self.freq_path = nn.ModuleList([
             UConvBlock(out_channels, in_channels, upsampling_depth),
-            MultiHeadCrossAttention2D(out_channels, spk_token_dim, n_head=n_head, hid_chan=att_hid_chan, dim=4),
+            MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu",
+                                     norm_type="LayerNormalization4D", dim=4),
+            MultiHeadCrossAttention2D(out_channels, spk_token_dim, n_head=n_head, hid_chan=att_hid_chan, dim=4),  # NEW
             normalizations.get("LayerNormalization4D")((out_channels, 1))
         ])
 
         self.frame_path = nn.ModuleList([
             UConvBlock(out_channels, in_channels, upsampling_depth),
-            MultiHeadCrossAttention2D(out_channels, spk_token_dim, n_head=n_head, hid_chan=att_hid_chan, dim=4),
+            MultiHeadSelfAttention2D(out_channels, 1, n_head=n_head, hid_chan=att_hid_chan, act_type="prelu",
+                                     norm_type="LayerNormalization4D", dim=4),
+            MultiHeadCrossAttention2D(out_channels, spk_token_dim, n_head=n_head, hid_chan=att_hid_chan, dim=4),  # NEW
             normalizations.get("LayerNormalization4D")((out_channels, 1))
         ])
 
@@ -670,22 +674,28 @@ class Recurrent(nn.Module):
         x = x.permute(0, 3, 1, 2).contiguous()  # B, T, N, nband
         freq_fea = self.freq_path[0](x.view(B * T, N, nband))  # B*T, N, nband
         freq_fea = freq_fea.view(B, T, N, nband).permute(0, 2, 1, 3).contiguous()  # B, N, T, nband
-        freq_fea = self.freq_path[1](freq_fea, spk_tokens)  # B, N, T, nband
-        freq_fea = self.freq_path[2](freq_fea)  # B, N, T, nband
+
+        freq_fea = self.freq_path[1](freq_fea)  # Self-attn
+        freq_fea = self.freq_path[2](freq_fea, spk_tokens)  # Cross-attn (NEW)
+        freq_fea = self.freq_path[3](freq_fea)  # Norm
+
         freq_fea = freq_fea.permute(0, 1, 3, 2).contiguous()
         x = freq_fea + residual_1  # B, N, nband, T
+
         # Process Frame Path
         residual_2 = x.clone()
         x2 = x.permute(0, 2, 1, 3).contiguous()
         frame_fea = self.frame_path[0](x2.view(B * nband, N, T))  # B*nband, N, T
         frame_fea = frame_fea.view(B, nband, N, T).permute(0, 2, 1, 3).contiguous()
-        frame_fea = self.frame_path[1](frame_fea, spk_tokens)  # B, N, nband, T
-        frame_fea = self.frame_path[2](frame_fea)  # B, N, nband, T
+
+        frame_fea = self.frame_path[1](frame_fea)  # Self-attn
+        frame_fea = self.frame_path[2](frame_fea, spk_tokens)  # Cross-attn (NEW)
+        frame_fea = self.frame_path[3](frame_fea)  # Norm
+
         x = frame_fea + residual_2  # B, N, nband, T
         return x
 
-
-class TSE_TIGER_Cross1(BaseModel):
+class TSE_TIGER_SelfCross(BaseModel):
     def __init__(
             self,
             out_channels=128,
@@ -707,7 +717,7 @@ class TSE_TIGER_Cross1(BaseModel):
             spk_tokenizer_mode: str = "linear",
             spk_token_drop: float = 0.0,
     ):
-        super(TSE_TIGER_Cross1, self).__init__(sample_rate=sample_rate)
+        super(TSE_TIGER_SelfCross, self).__init__(sample_rate=sample_rate)
 
         self.sample_rate = sample_rate
         self.win = win

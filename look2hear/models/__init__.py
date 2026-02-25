@@ -5,6 +5,7 @@ from .causal_tiger3 import CausalTIGER3
 from .tiger_tse import TSE_TIGER
 from .tiger_tse_FiLM1 import TSE_TIGER_FiLM1
 from .tiger_tse_cross1 import TSE_TIGER_Cross1
+from .tiger_tse_SelfCross import TSE_TIGER_SelfCross
 from .tiger_dnr import TIGERDNR
 from .base_model import BaseModel
 
@@ -16,6 +17,7 @@ __all__ = [
     "TSE_TIGER",
     "TSE_TIGER_FiLM1",
     "TSE_TIGER_Cross1",
+    "TSE_TIGER_SelfCross"
 ]
 
 

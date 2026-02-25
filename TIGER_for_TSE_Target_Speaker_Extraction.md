@@ -331,3 +331,13 @@ This section describes how speaker embeddings are made available to the model wh
   - `forward(self, input, spk_emb=None)`
 - In the current implementation, `spk_emb` is not yet used internally for conditioning.
 - So embeddings are available at the system-model interface, but not yet consumed inside the separator blocks.
+
+## FiLM conditioning (speaker conditioning)
+### TIGER_TSE_FiLM1
+FiLM (Feature-wise Linear Modulation) uses the target speaker embedding (`spk_emb`) to adapt the internal subband features before separation.  
+A small MLP predicts per-feature scale (`gamma`) and shift (`beta`) values, and the features are modulated as:
+
+`subband_feature = gamma * subband_feature + beta`
+
+This helps the model emphasize features that match the target speaker and suppress non-target speech/noise.  
+The FiLM layer is initialized close to identity (`gamma ≈ 1`, `beta ≈ 0`) for more stable training.

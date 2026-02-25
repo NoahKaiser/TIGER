@@ -1,7 +1,7 @@
 #Copy of tiger-small.yml
 # Network config
 audionet:
-  audionet_name: TSE_TIGER_Cross1
+  audionet_name: TSE_TIGER_SelfCross
   audionet_config:
     out_channels: 128
     in_channels: 256
@@ -80,4 +80,4 @@ datamodule:
   #path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
   #sort_ids: true
 exp:
-  exp_name: TSE-TIGER-Cross1-ECHI
+  exp_name: TSE-TIGER-SelfCross-ECHI
