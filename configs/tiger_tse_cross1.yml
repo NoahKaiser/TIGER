@@ -1,0 +1,83 @@
+#Copy of tiger-small.yml
+# Network config
+audionet:
+  audionet_name: TSE_TIGER_Cross1
+  audionet_config:
+    out_channels: 128
+    in_channels: 256
+    num_blocks: 4
+    upsampling_depth: 5
+    win: 640
+    stride: 160
+    num_sources: 1
+
+# Loss config
+loss:
+  train:
+    loss_func: null #no PIT loss for TSE necessary
+    sdr_type: pairwise_neg_sisdr #use pairwise_neg_sisdr for always present target , pairwise_neg_se_sisdr for possible silent target speaker
+    config: {}
+  val:
+    loss_func: null #no PIT loss for TSE necessary
+    sdr_type: pairwise_neg_sisdr #use pairwise_neg_sisdr for always present target speaker, pairwise_neg_se_sisdr for possible silent target speaker
+    config: {}
+
+# Training config
+training:
+  system: AudioLightningModuleTSE_ECHI
+  gpus: [0]
+  parallel: ddp
+  epochs: 500
+  early_stop:
+    monitor: val_loss
+    mode: min
+    patience: 20
+    verbose: true
+  SpeedAug: False
+  ckpt_path: Null # Null if training from scratch
+  checkpoint:
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
+
+# Optim config
+optimizer:
+  optim_name: adam
+  lr: 0.001 #original lr=0.001, try smaller lr
+  weight_decay: 0
+
+# Sche config
+scheduler: 
+  sche_name: ReduceLROnPlateau
+  sche_config:
+    patience: 10
+    factor: 0.5
+
+# Data config
+datamodule:
+  data_name: TSE_ECHIDataModule
+  data_config: #important: add the path to the Preprocessed dataset where the json files are located
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    has_test_targets: false # true-eval has no target_pos*.json; keep false for fit-only training
+    spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+    verify_spk_alignment: false # preflight check: target manifest spk_ids must exist in spk_emb_path
+    n_src: 4 # dataset target positions to sample from (pos1..pos4), not model output sources
+    sample_rate: 16000
+    segment: 3.0
+    only_valid_speech_region: true
+    valid_speech_metadata_root: /data/public/CHiME9/metadata/ref # required when only_valid_speech_region=true, e.g. /data/public/CHiME9/metadata/ref
+    #normalize_audio: false
+    batch_size: 4
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: false
+#speaker_embedding:
+  #path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+  #sort_ids: true
+exp:
+  exp_name: TSE-TIGER-Cross1-ECHI_only_valid_speech_regions
