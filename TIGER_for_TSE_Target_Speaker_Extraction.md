@@ -341,3 +341,175 @@ A small MLP predicts per-feature scale (`gamma`) and shift (`beta`) values, and 
 
 This helps the model emphasize features that match the target speaker and suppress non-target speech/noise.  
 The FiLM layer is initialized close to identity (`gamma ≈ 1`, `beta ≈ 0`) for more stable training.
+
+
+## SpeakerPromptTokenizer
+
+`SpeakerPromptTokenizer` converts a fixed-length speaker embedding into a small set of **speaker prompt tokens** that act as a learnable *memory* for cross-attention conditioning.
+
+### Purpose
+Instead of conditioning the separator with a single vector (e.g., concatenation or FiLM), we represent the target speaker as a **token sequence** `spk_tokens ∈ ℝ^{B×M×d}`. These tokens can be used as **Keys/Values** in cross-attention, allowing the separator to selectively read speaker information at each time–frequency location.
+
+This is conceptually related to prompt/prefix conditioning in attention models and to affine modulation of learned prompts (in `prompt_mod` mode).  
+References: Vaswani et al. (Transformer attention) , Li & Liang (Prefix-Tuning) , Perez et al. (FiLM) 
+
+### I/O
+- **Input:** `spk_emb` with shape `(B, D)` (or `(B, 1, D)`; the singleton dim is removed)
+- **Output:** `spk_tokens` with shape `(B, M, d)`
+
+Where:
+- `B` = batch size  
+- `D` = speaker embedding dimension (e.g., 192 for ECAPA-style embeddings)
+- `M` = number of prompt tokens (e.g., 8)
+- `d` = token dimension (e.g., 128)
+
+### Modes
+#### 1) `mode="linear"`
+A single linear projection maps the embedding into `M·d` scalars and reshapes:
+\[
+\text{tok} = \mathrm{reshape}(W\,\text{spk\_emb}+b) \in \mathbb{R}^{B\times M\times d}.
+\]
+
+#### 2) `mode="prompt_mod"`
+Learned base prompts are **affinely modulated** by per-sample `(γ, β)` predicted from the embedding:
+\[
+\text{tok} = P\odot(1+\gamma) + \beta,
+\]
+where \(P\in\mathbb{R}^{M\times d}\) is a learned prompt table and \(\gamma,\beta\in\mathbb{R}^{B\times M\times d}\).
+
+### Notes
+- LayerNorm is applied on the token dimension (`d`) and optional dropout is supported.
+- The module validates input rank and embedding dimension to avoid silent mismatches.
+- These tokens are typically fed into `MultiHeadCrossAttention2D` as `Keys/Values`.
+
+---
+
+## MultiHeadCrossAttention2D (Speaker–Speech Cross-Attention)
+
+`MultiHeadCrossAttention2D` implements **multi-head cross-attention** that conditions a 2D time–frequency representation on speaker prompt tokens.
+
+### Purpose
+Given mixture features `x ∈ ℝ^{B×C×T×F}` and speaker tokens `S ∈ ℝ^{B×M×D_s}`, the module computes:
+- **Queries** from mixture features (`x`)
+- **Keys/Values** from speaker tokens (`S`)
+
+This allows each time–frequency position to *selectively read* speaker information from a compact token memory.  
+Reference: Vaswani et al. (scaled dot-product attention) 
+
+### I/O
+- **Input:**
+  - `x`: mixture features `(B, C, T, F)`
+  - `spk_tokens`: speaker memory `(B, M, D_s)`
+- **Output:** speaker-conditioned features with the same shape as `x`
+
+Where:
+- `C` = feature channels
+- `T` = time frames
+- `F` = frequency bins / subband index (depending on path)
+- `M` = number of speaker tokens
+- `D_s` = speaker token dimension (must match the tokenizer output)
+- `h` = number of attention heads
+
+### Mechanism (per head)
+Scaled dot-product cross-attention:
+\[
+\mathrm{Attn}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\]
+with:
+- \(Q = W_q\,x\)
+- \(K = W_k\,S\)
+- \(V = W_v\,S\)
+
+### 2D handling and factorization
+The module **factorizes attention over the last axis** (frequency or time depending on `dim`):
+
+1. Optionally swap the last two axes if `dim==4` so that attention always runs over the internal `T` axis.
+2. Reshape into sequences per slice:
+   \[
+   x \rightarrow x_{\text{seq}} \in \mathbb{R}^{(B\cdot F)\times T\times C}
+   \]
+3. Compute attention from each slice to the same speaker memory `S` (broadcasted across `F`).
+4. Reshape back to `(B, C, T, F)` and add a residual connection.
+
+### Complexity
+Let `L` be the attended axis length (typically `T`) and `M` the number of speaker tokens.
+- Self-attention scales as \(O(L^2)\)
+- Cross-attention here scales as \(O(L\cdot M)\)
+
+With small `M` (e.g., 8), cross-attention is significantly cheaper in the attention matrix than full self-attention. 
+
+### Notes
+- Uses `Dropout` on attention weights and on the output projection.
+- Adds a residual connection: `out = x + CrossAttn(x, spk_tokens)`.
+- In `TSE_TIGER_SelfCross`, this module is applied **after** self-attention in each path, implementing serial self + cross conditioning.
+
+### Usage (Speaker embedding → prompt tokens → cross-attention conditioning)
+
+This section shows the standard wiring used in **TSE_TIGER_SelfCross**:
+1) convert a fixed speaker embedding to **prompt tokens** with `SpeakerPromptTokenizer`  
+2) use these tokens as **Keys/Values** in `MultiHeadCrossAttention2D` to condition mixture features  
+3) apply **serial Self-Attention + Cross-Attention** as done inside the `Recurrent` separator  
+4) replicate tokens correctly for **multi-channel** internal batching (`B*nch`).
+
+#### 1) Speaker embedding → speaker prompt tokens
+
+```python
+import torch
+
+# Example shapes
+B = 2                   # batch size
+D_spk = 192             # speaker embedding dimension
+M = 8                   # number of prompt tokens
+d_tok = 128             # token dimension
+
+spk_emb = torch.randn(B, D_spk)  # (B, D_spk)
+
+tokenizer = SpeakerPromptTokenizer(
+    spk_emb_dim=D_spk,
+    num_tokens=M,
+    token_dim=d_tok,
+    mode="linear",       # or "prompt_mod"
+    dropout=0.0,
+    use_ln=True,
+)
+
+spk_tokens = tokenizer(spk_emb)  # (B, M, d_tok)
+```
+#### 2) Mixture features → speaker-conditioned features (cross-attention)
+```python
+# Mixture feature map from a separator path (typical layout in TIGER-style blocks)
+# x: (B, C, T, F)
+C = 128     # feature channels
+T = 100     # time frames
+F = 16      # frequency bins / subband index
+x = torch.randn(B, C, T, F)
+
+cross_attn = MultiHeadCrossAttention2D(
+    in_chan=C,
+    spk_dim=d_tok,       # must match tokenizer token_dim
+    n_head=4,
+    hid_chan=4,
+    dim=4,               # keep consistent with your Recurrent freq/frame paths
+    attn_drop=0.0,
+    proj_drop=0.0,
+)
+
+x_cond = cross_attn(x, spk_tokens)   # (B, C, T, F)
+```
+
+### 3) Serial Self + Cross (as used inside Recurrent)
+```python
+self_attn = MultiHeadSelfAttention2D(
+    in_chan=C,
+    n_freqs=1,
+    n_head=4,
+    hid_chan=4,
+    act_type="prelu",
+    norm_type="LayerNormalization4D",
+    dim=4,
+)
+
+x = self_attn(x)                  # mixture self-attention
+x = cross_attn(x, spk_tokens)     # speaker-conditioned cross-attention
+```
+---
