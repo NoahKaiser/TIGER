@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 import argparse
 import json
+from typing import Optional, Sequence
 import look2hear.datas
 import look2hear.models
 import look2hear.system
@@ -32,7 +33,7 @@ import warnings
 
 from pathlib import Path
 from own_modules.callbacks_lightning import ExternalStopCallback
-from look2hear.datas.echi_subset_datamodule import SubsetDataModule, SubsetSpec
+from torch.utils.data import DataLoader, Subset
 
 warnings.filterwarnings("ignore")
 
@@ -48,6 +49,57 @@ parser.add_argument(
     help="Full path to save best validation model",
 )
 
+
+def _build_loss_from_config(loss_cfg):
+    """Supports TSE configs where loss_func can be null/None."""
+    sdr_obj = getattr(look2hear.losses, loss_cfg["sdr_type"])
+    loss_name = loss_cfg.get("loss_func", None)
+    if loss_name is None or str(loss_name).lower() in {"none", "null", ""}:
+        return sdr_obj
+    return getattr(look2hear.losses, loss_name)(
+        sdr_obj,
+        **loss_cfg.get("config", {}),
+    )
+
+
+def _subset_from_config(ds, indices: Optional[Sequence[int]], n_samples: Optional[int]):
+    if ds is None:
+        return None
+
+    if indices is not None:
+        ds_len = len(ds)
+        idx = []
+        for raw_i in indices:
+            i = int(raw_i)
+            if i < 0:
+                i += ds_len
+            if i < 0 or i >= ds_len:
+                raise IndexError(
+                    f"Subset index out of range: {raw_i} for dataset length {ds_len}"
+                )
+            idx.append(i)
+        return Subset(ds, idx)
+
+    if n_samples is None:
+        return ds
+
+    n = min(int(n_samples), len(ds))
+    return Subset(ds, list(range(n)))
+
+
+def _make_loader(base_dm, dataset, shuffle: bool, drop_last: bool):
+    if dataset is None:
+        return None
+    return DataLoader(
+        dataset,
+        batch_size=base_dm.batch_size,
+        shuffle=shuffle,
+        num_workers=base_dm.num_workers,
+        pin_memory=base_dm.pin_memory,
+        persistent_workers=base_dm.persistent_workers and base_dm.num_workers > 0,
+        drop_last=drop_last,
+    )
+
 def main(config):
     print_only(
         "Instantiating base datamodule <{}>".format(config["datamodule"]["data_name"])
@@ -57,20 +109,33 @@ def main(config):
         **config["datamodule"]["data_config"]
     )
     print_only(
-        "Instantiating Subset datamodule of <{}>".format(config["datamodule"]["data_name"])
+        "Building subset loaders for <{}>".format(config["datamodule"]["data_name"])
     )
-    train_idx = [20]
-    val_idx = [20]
 
-    base_dm = getattr(look2hear.datas, config["datamodule"]["data_name"])(**config["datamodule"]["data_config"])
+    # Keep old behavior by default: single deterministic sample at index 20.
+    subset_cfg = config.get("subset", {})
+    train_idx = subset_cfg.get("train_indices", [20])
+    val_idx = subset_cfg.get("val_indices", [20])
+    test_idx = subset_cfg.get("test_indices", None)
+    n_train = subset_cfg.get("n_train", None)
+    n_val = subset_cfg.get("n_val", None)
+    n_test = subset_cfg.get("n_test", None)
+    shuffle_train = bool(subset_cfg.get("shuffle_train", False))
 
-    dm = SubsetDataModule(
-        base_dm,
-        subset=SubsetSpec(train_indices=train_idx, val_indices=val_idx),
-        shuffle_train=False,  # keep deterministic ordering
-    )
-    dm.setup()
-    train_loader, val_loader, test_loader = dm.make_loader
+    # TSE_ECHIDataModule should be setup with stage='fit' to avoid creating test set when has_test_targets=False.
+    try:
+        base_dm.setup(stage="fit")
+    except TypeError:
+        # Compatibility with datamodules exposing setup() without stage arg.
+        base_dm.setup()
+
+    train_subset = _subset_from_config(getattr(base_dm, "data_train", None), train_idx, n_train)
+    val_subset = _subset_from_config(getattr(base_dm, "data_val", None), val_idx, n_val)
+    test_subset = _subset_from_config(getattr(base_dm, "data_test", None), test_idx, n_test)
+
+    train_loader = _make_loader(base_dm, train_subset, shuffle=shuffle_train, drop_last=True)
+    val_loader = _make_loader(base_dm, val_subset, shuffle=False, drop_last=False)
+    test_loader = _make_loader(base_dm, test_subset, shuffle=False, drop_last=False)
     
     # Define model and optimizer
     print_only(
@@ -119,14 +184,8 @@ def main(config):
         )
     )
     loss_func = {
-        "train": getattr(look2hear.losses, config["loss"]["train"]["loss_func"])(
-            getattr(look2hear.losses, config["loss"]["train"]["sdr_type"]),
-            **config["loss"]["train"]["config"],
-        ),
-        "val": getattr(look2hear.losses, config["loss"]["val"]["loss_func"])(
-            getattr(look2hear.losses, config["loss"]["val"]["sdr_type"]),
-            **config["loss"]["val"]["config"],
-        ),
+        "train": _build_loss_from_config(config["loss"]["train"]),
+        "val": _build_loss_from_config(config["loss"]["val"]),
     }
 
     print_only("Instantiating System <{}>".format(config["training"]["system"]))
