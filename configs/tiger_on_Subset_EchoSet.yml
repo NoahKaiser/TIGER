@@ -42,7 +42,7 @@ training:
   SpeedAug: False
   ckpt_path: Null # Null if training from scratch
   checkpoint:
-    monitor: "val_loss"
+    monitor: val_loss/dataloader_idx_0
     mode: "min"
     save_top_k: 5
     save_last: true
@@ -69,14 +69,14 @@ datamodule:
     train_dir: /data/public/EchoSet/train
     valid_dir: /data/public/EchoSet/val
     test_dir: /data/public/EchoSet/test
-    has_test_targets: true # true-eval has no target_pos*.json; keep false for fit-only training
-    spk_emb_path: null
-    verify_spk_alignment: false
+    #has_test_targets: true # true-eval has no target_pos*.json; keep false for fit-only training
+    #spk_emb_path: null
+    #verify_spk_alignment: false
     n_src: 2
     sample_rate: 16000
     segment: 3.0
-    only_valid_speech_region: false
-    valid_speech_metadata_root: null
+    #only_valid_speech_region: false
+    #valid_speech_metadata_root: null
     #normalize_audio: false
     batch_size: 1
     num_workers: 8
