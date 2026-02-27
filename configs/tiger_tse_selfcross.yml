@@ -72,7 +72,7 @@ datamodule:
     only_valid_speech_region: true
     valid_speech_metadata_root: /data/public/CHiME9/metadata/ref # required when only_valid_speech_region=true, e.g. /data/public/CHiME9/metadata/ref
     #normalize_audio: false
-    batch_size: 4
+    batch_size: 2
     num_workers: 8
     pin_memory: true
     persistent_workers: false

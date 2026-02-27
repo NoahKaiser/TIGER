@@ -26,7 +26,7 @@ loss:
 
 # Training config
 training:
-  system: AudioLightningModuleECHI
+  system: AudioLightningModuleTSE_ECHI
   gpus: [0]
   parallel: ddp
   epochs: 10000 # 500
@@ -78,6 +78,13 @@ datamodule:
     num_workers: 8
     pin_memory: true
     persistent_workers: false
-
+subset:
+  train_indices: [8]
+  val_indices: [8]
+  test_indices: null
+  n_train: null
+  n_val: null
+  n_test: null
+  shuffle: false
 exp:
   exp_name: TIGER_TSE_on_Subset-TSE_ECHI
