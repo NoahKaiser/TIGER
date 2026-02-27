@@ -1,0 +1,94 @@
+#Copy of tiger-small.yml
+# Network config
+audionet:
+  audionet_name: TIGER
+  audionet_config:
+    out_channels: 128
+    in_channels: 256
+    num_blocks: 4
+    upsampling_depth: 5
+    win: 640
+    stride: 160
+    num_sources: 2
+
+# Loss config
+loss:
+  train:
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_snr
+    config:
+      pit_from: pw_mtx
+      threshold_byloss: false
+
+  val:
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_sisdr
+    config:
+      pit_from: pw_mtx
+      threshold_byloss: false
+
+
+# Training config
+training:
+  system: AudioLightningModule
+  gpus: [0]
+  parallel: ddp
+  epochs: 10000 # 500
+  early_stop: null
+    #monitor: val_loss
+    #mode: min
+    #patience: 20
+    #verbose: true
+  SpeedAug: False
+  ckpt_path: Null # Null if training from scratch
+  checkpoint:
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
+
+# Optim config
+optimizer:
+  optim_name: adam
+  lr: 0.001 #original lr=0.001, try smaller lr
+  weight_decay: 0
+
+# Sche config
+scheduler: 
+  sche_name: Null #ReduceLROnPlateau
+  sche_config: {}
+    #patience: 10
+    #factor: 0.5
+
+# Data config
+datamodule:
+  data_name: EchoSetDataModule
+  data_config: #important: add the path to the Preprocessed dataset where the json files are located
+    train_dir: /data/public/EchoSet/train
+    valid_dir: /data/public/EchoSet/val
+    test_dir: /data/public/EchoSet/test
+    has_test_targets: true # true-eval has no target_pos*.json; keep false for fit-only training
+    spk_emb_path: null
+    verify_spk_alignment: false
+    n_src: 2
+    sample_rate: 16000
+    segment: 3.0
+    only_valid_speech_region: false
+    valid_speech_metadata_root: null
+    #normalize_audio: false
+    batch_size: 1
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: false
+subset:
+  train_indices: [8]
+  val_indices: [8]
+  test_indices: [8]
+  n_train: null
+  n_val: null
+  n_test: null
+  shuffle: false
+exp:
+  exp_name: TIGER_on_Subset-EchoSet
