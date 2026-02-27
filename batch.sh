@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=Listen_to_TSE_ECHIDataset
+#SBATCH --job-name=tse_tiger_on_Subset_TSE_ECHI
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -16,7 +16,7 @@
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
-#uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tse_tiger_on_Subset_TSE_ECHI.yml
+uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tse_tiger_on_Subset_TSE_ECHI.yml
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \

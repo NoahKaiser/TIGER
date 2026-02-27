@@ -62,9 +62,9 @@ scheduler:
 datamodule:
   data_name: TSE_ECHIDataModule
   data_config: #important: add the path to the Preprocessed dataset where the json files are located
-    train_dir: /no_backups/s1495/Processed_ECHI/ha/train
-    valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
-    test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
     has_test_targets: false # true-eval has no target_pos*.json; keep false for fit-only training
     spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
     verify_spk_alignment: false
@@ -79,7 +79,7 @@ datamodule:
     pin_memory: true
     persistent_workers: false
 subset:
-  train_indices: [8]
+  train_indices: [8,1008,2008,3008,4008,5008,6008,7008]
   val_indices: [8]
   test_indices: null
   n_train: null
