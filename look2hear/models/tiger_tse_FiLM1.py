@@ -10,7 +10,7 @@ from ..layers import activations, normalizations
 Adjustements for Target Speaker Extraction (TSE)-TIGER:
 1) make TSE_TIGER accept speaker embedding (spk_emb)
 2) deleted block with force-mask-to-one for mixture consistency -> not valid for TSE and ECHI dataset
-3) added FiLM as early conditioning on subband features using a fixed speaker embedding e
+3) added FiLM (Global per-channel affine transformation) as early conditioning on subband features using a fixed speaker embedding e, broadcasted among all sub-band equally
 """
 
 def GlobLN(nOut):
