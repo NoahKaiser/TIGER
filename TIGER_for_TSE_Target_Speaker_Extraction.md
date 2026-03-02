@@ -342,6 +342,30 @@ A small MLP predicts per-feature scale (`gamma`) and shift (`beta`) values, and 
 This helps the model emphasize features that match the target speaker and suppress non-target speech/noise.  
 The FiLM layer is initialized close to identity (`gamma ≈ 1`, `beta ≈ 0`) for more stable training.
 
+### TIGER_TSE_FiLM2
+`TIGER_TSE_FiLM2` moves FiLM conditioning from an early one-shot feature modulation to an **iterative update modulation** inside the separator (`Recurrent.forward`).
+
+In `TSE_TIGER_FiLM2.forward`, the speaker embedding is mapped once to FiLM parameters:
+- `film_params = film_mlp(spk_emb) -> [B*nch, 2N]`
+- split into `gamma, beta -> [B*nch, N]`
+- scaled as `gamma = 1 + film_scale * gamma`, `beta = film_scale * beta`
+- reshaped for separator broadcasting: `gamma_it, beta_it -> [B*nch, N, 1, 1]`
+
+Then `Recurrent.forward(x, gamma, beta)` applies FiLM to the **iteration update** (not directly to the input state):
+- input separator state is rearranged to `[B, N, nband, T]`
+- each iteration computes:
+  - `u_i` (current iteration input; first `x`, then `concat_block(mixture + x)`)
+  - `y_i = freq_time_process(u_i)`
+  - `delta_i = y_i - u_i`
+- FiLM is applied on `delta_i` channel-wise:
+  - `delta_i <- gamma * delta_i + beta` (with broadcasting over `nband` and `T`)
+- state update:
+  - `x <- x + delta_i`
+
+So, in FiLM2, speaker information controls **how much each feature channel update is amplified/suppressed at every recurrent step**, instead of only modulating subband features once before separation.
+
+Implementation note: in the current call site, the separator is invoked with `beta=None`, so conditioning is effectively scale-only (`delta <- gamma * delta`) while retaining the full FiLM interface.
+
 
 ## SpeakerPromptTokenizer
 
