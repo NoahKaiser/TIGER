@@ -1,0 +1,90 @@
+#Copy of tiger-small.yml
+# Network config
+audionet:
+  audionet_name: TSE_TIGER_SelfCross
+  audionet_config:
+    out_channels: 128
+    in_channels: 256
+    num_blocks: 4
+    upsampling_depth: 5
+    win: 640
+    stride: 160
+    num_sources: 1
+
+# Loss config
+loss:
+  train:
+    loss_func: null
+    sdr_type: pairwise_neg_sisdr
+    config: {}
+
+  val:
+    loss_func: null
+    sdr_type: pairwise_neg_sisdr
+    config: {}
+
+
+# Training config
+training:
+  system: AudioLightningModuleTSE_ECHI
+  gpus: [0]
+  parallel: ddp
+  epochs: 10000 # 500
+  early_stop: null
+    #monitor: val_loss
+    #mode: min
+    #patience: 20
+    #verbose: true
+  SpeedAug: False
+  ckpt_path: Null # Null if training from scratch
+  checkpoint:
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
+
+# Optim config
+optimizer:
+  optim_name: adam
+  lr: 0.001 #original lr=0.001, try smaller lr
+  weight_decay: 0
+
+# Sche config
+scheduler: 
+  sche_name: Null #ReduceLROnPlateau
+  sche_config: {}
+    #patience: 10
+    #factor: 0.5
+
+# Data config
+datamodule:
+  data_name: TSE_ECHIDataModule
+  data_config: #important: add the path to the Preprocessed dataset where the json files are located
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    has_test_targets: false # true-eval has no target_pos*.json; keep false for fit-only training
+    spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+    verify_spk_alignment: false
+    n_src: 4
+    sample_rate: 16000
+    segment: 3.0
+    only_valid_speech_region: true
+    valid_speech_metadata_root: /data/public/CHiME9/metadata/ref
+    #normalize_audio: false
+    batch_size: 1
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: false
+subset:
+  train_indices: [8]
+  val_indices: [8]
+  test_indices: null
+  n_train: null
+  n_val: null
+  n_test: null
+  shuffle: false
+exp:
+  exp_name: TSE_TIGER_SelfCross_on_Subset-TSE_ECHI
