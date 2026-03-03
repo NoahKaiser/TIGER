@@ -1,0 +1,95 @@
+# TSE TIGER FiLM+Cross config
+# Uses TSE_TIGER_FiLMCross (per-band FiLM + speaker cross-attention)
+
+# Network config
+audionet:
+  audionet_name: TSE_TIGER_FiLMCross
+  audionet_config:
+    out_channels: 128
+    in_channels: 256
+    num_blocks: 4
+    upsampling_depth: 5
+    att_n_head: 4
+    att_hid_chan: 4
+    att_kernel_size: 8
+    att_stride: 1
+    win: 640
+    stride: 160
+    num_sources: 1
+    spk_emb_dim: 192
+    spk_num_tokens: 8
+    spk_token_dim: 128
+    spk_tokenizer_mode: linear
+    spk_token_drop: 0.0
+    film_hidden: 256
+    film_scale: 0.1
+    film_init_std: 0.001
+    film_gate_init_logit: -2.0
+
+# Loss config
+loss:
+  train:
+    loss_func: null # no PIT loss needed for single-target TSE
+    sdr_type: pairwise_neg_sisdr
+    config: {}
+  val:
+    loss_func: null
+    sdr_type: pairwise_neg_sisdr
+    config: {}
+
+# Training config
+training:
+  system: AudioLightningModuleTSE_ECHI
+  gpus: [0]
+  parallel: ddp
+  epochs: 500
+  film_warmup_steps: 3000
+  early_stop:
+    monitor: val_loss
+    mode: min
+    patience: 20
+    verbose: true
+  SpeedAug: False
+  ckpt_path: Null
+  checkpoint:
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+    save_last: true
+    verbose: true
+
+# Optim config
+optimizer:
+  optim_name: adam
+  lr: 0.0001
+  weight_decay: 0
+
+# Scheduler config
+scheduler:
+  sche_name: ReduceLROnPlateau
+  sche_config:
+    patience: 10
+    factor: 0.5
+
+# Data config
+datamodule:
+  data_name: TSE_ECHIDataModule
+  data_config:
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    has_test_targets: false # eval has no target manifests in fit-only runs
+    spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+    verify_spk_alignment: true
+    n_src: 4
+    sample_rate: 16000
+    segment: 3.0
+    only_valid_speech_region: true
+    valid_speech_metadata_root: /data/public/CHiME9/metadata/ref
+    batch_size: 2
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: false
+
+exp:
+  exp_name: TSE-TIGER-FiLMCross-ECHI

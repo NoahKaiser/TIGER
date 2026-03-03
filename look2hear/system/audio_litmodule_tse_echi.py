@@ -79,6 +79,9 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
         self.default_monitor = "val_loss"
         self.save_hyperparameters(self.config_to_hparams(self.config))
         self.validation_step_outputs = []
+        self.film_warmup_steps = int(
+            self.config.get("training", {}).get("film_warmup_steps", 0) or 0
+        )
 
         # TSE note: old SpeedAug was separation-specific; disable for now
         if self.config.get("training", {}).get("SpeedAug", False):
@@ -101,6 +104,17 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_nb):
+        film_warmup = None
+        if hasattr(self.audio_model, "set_film_warmup"):
+            if self.film_warmup_steps > 0:
+                film_warmup = min(
+                    1.0,
+                    float(self.global_step + 1) / float(self.film_warmup_steps),
+                )
+            else:
+                film_warmup = 1.0
+            self.audio_model.set_film_warmup(film_warmup)
+
         mixtures, target, spk_idx, _utt_id = batch  # target: [B,T]
         # Ensure target shape matches model output for num_sources=1
         targets = target.unsqueeze(1)  # [B,1,T]
@@ -109,6 +123,11 @@ class AudioLightningModuleTSE_ECHI(pl.LightningModule):
         loss = self._ensure_scalar_loss(self.loss_func["train"](est, targets))
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True, logger=True)
+        if film_warmup is not None:
+            self.log("film_warmup", film_warmup, on_step=True, on_epoch=False, prog_bar=False, sync_dist=True, logger=True)
+            if hasattr(self.audio_model, "film_gate_logit"):
+                film_gate = torch.sigmoid(self.audio_model.film_gate_logit.detach())
+                self.log("film_gate", film_gate, on_step=True, on_epoch=False, prog_bar=False, sync_dist=True, logger=True)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_nb):
