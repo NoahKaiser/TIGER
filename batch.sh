@@ -9,7 +9,7 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse20
+#SBATCH --nodelist=linse18
 
 
 
@@ -51,9 +51,9 @@ uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tse_tigerFiLM2_
     #--n 100 --n_src 4 --sr 16000 --segment 3.0 --start_idx 0
 #uv run --extra=cu118 Listen_to_TSE_ECHIDataset.py \
  # --json_dir /no_backups/s1495/Processed_TSE_ECHI/ha/train \
- # --spk_emb_path /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt \
-  #--out_dir /no_backups/s1495/Listen_to_TSE_ECHIDataset/tse_batch01 \
-  #--n 100 --segment 3.0 --start_idx 0 \
+  #--spk_emb_path /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt \
+  #--out_dir /no_backups/s1495/Listen_to_TSE_ECHIDataset/tse_batch02 \
+  #--indices 8 2000 --segment 3.0 \
   #--only_valid_speech_region \
   #--valid_speech_metadata_root /data/public/CHiME9/metadata/ref
 

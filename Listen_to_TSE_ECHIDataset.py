@@ -62,6 +62,13 @@ def main():
     p.add_argument("--hop", default=None, type=float, help="Hop in seconds (default: segment)")
     p.add_argument("--pad_last", action="store_true", help="If set, allow tail padding")
     p.add_argument("--start_idx", default=0, type=int, help="Dataset index to start from")
+    p.add_argument(
+        "--indices",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Explicit dataset indices to dump (overrides --start_idx/--n)",
+    )
     p.add_argument("--utt_id_mode", default="path", choices=["path", "session"], help="How utt_id base is formed")
     p.add_argument("--unknown_speaker", default="error", choices=["error", "use_unk"], help="How to handle unknown speaker ids")
     p.add_argument("--unk_idx", default=0, type=int, help="Fallback speaker index when --unknown_speaker use_unk")
@@ -104,18 +111,27 @@ def main():
         valid_speech_metadata_root=args.valid_speech_metadata_root,
     )
 
-    n = min(args.n, len(ds) - args.start_idx)
-    if n <= 0:
-        raise RuntimeError(f"Nothing to dump: len(ds)={len(ds)}, start_idx={args.start_idx}")
+    if args.indices is not None:
+        indices = args.indices
+        bad = [i for i in indices if i < 0 or i >= len(ds)]
+        if bad:
+            raise RuntimeError(f"indices out of range (0..{len(ds)-1}): {bad}")
+    else:
+        n = min(args.n, len(ds) - args.start_idx)
+        if n <= 0:
+            raise RuntimeError(f"Nothing to dump: len(ds)={len(ds)}, start_idx={args.start_idx}")
+        indices = list(range(args.start_idx, args.start_idx + n))
 
     print(f"Loaded speaker table: {len(spk_ids)} ids from {args.spk_emb_path}")
-    print(f"Dataset len={len(ds)} | dumping n={n} starting at idx={args.start_idx}")
+    if args.indices is not None:
+        print(f"Dataset len={len(ds)} | dumping indices={indices}")
+    else:
+        print(f"Dataset len={len(ds)} | dumping n={len(indices)} starting at idx={args.start_idx}")
     print(f"Writing WAVs to: {out_dir}")
 
     metadata_rows = []
 
-    for i in range(n):
-        idx = args.start_idx + i
+    for i, idx in enumerate(indices):
         mixture, target, spk_idx_t, utt_id = ds[idx]
 
         mix_np = to_1d_numpy(mixture)

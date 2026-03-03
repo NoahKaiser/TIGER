@@ -79,7 +79,7 @@ datamodule:
     pin_memory: true
     persistent_workers: false
 subset:
-  train_indices: [8]
+  train_indices: [8, 2000]
   val_indices: [8]
   test_indices: null
   n_train: null
