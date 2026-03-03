@@ -537,3 +537,75 @@ x = self_attn(x)                  # mixture self-attention
 x = cross_attn(x, spk_tokens)     # speaker-conditioned cross-attention
 ```
 ---
+
+## Implemented Description: `look2hear/models/tiger_tse_FiLMCross.py`
+`TSE_TIGER_FiLMCross` combines:
+- **FiLM1-style early feature modulation** on separator input subband features
+- **SelfCross speaker-token cross-attention** inside both frequency and frame paths of the recurrent separator
+
+It is implemented as a subclass of `TSE_TIGER_SelfCross` and reuses the full speaker-token cross-attention pipeline while adding stronger FiLM conditioning.
+
+### Core conditioning flow
+Given mixture waveform `input` and speaker embedding `spk_emb`:
+1. Build STFT subband features (`subband_feature`) from mixture.
+2. Build speaker prompt tokens via inherited `self.spk_tokenizer(spk_emb)`.
+3. Build FiLM parameters from `spk_emb` using `self.film_mlp`.
+4. Apply **per-band, per-channel FiLM** to separator input features.
+5. Run recurrent separator with speaker cross-attention (`self.separator(..., spk_tokens)`).
+6. Predict complex masks and reconstruct waveform via iSTFT.
+
+### FiLM parameterization in FiLMCross
+Unlike global channel-only FiLM, FiLMCross predicts FiLM parameters for each `(band, feature_channel)`:
+- `film_mlp(spk_emb) -> [B*nch, 2 * nband * N]`
+- reshape to `[B*nch, 2, nband, N]`
+- split:
+  - `gamma_raw = film_params[:, 0]` -> `[B*nch, nband, N]`
+  - `beta_raw  = film_params[:, 1]` -> `[B*nch, nband, N]`
+- scale:
+  - `gamma = 1 + film_scale * gamma_raw`
+  - `beta  = film_scale * beta_raw`
+- apply (broadcast over time):
+  - `film_out = gamma[..., None] * subband_feature + beta[..., None]`
+
+This increases speaker selectivity by allowing different modulation across subbands.
+
+### FiLM activation strategy (non-zero init + gate + warmup)
+To avoid FiLM being completely inactive at initialization:
+- The final FiLM linear layer uses **tiny non-zero init** on the gamma branch (`film_init_std`) and zero init on beta branch.
+- A learnable scalar gate `film_gate_logit` is used:
+  - `film_gate = sigmoid(film_gate_logit) * film_warmup`
+- FiLM is blended with identity using residual gating:
+  - `subband_feature = subband_feature + film_gate * (film_out - subband_feature)`
+
+This provides controlled FiLM activation early in training and prevents abrupt over-conditioning.
+
+### Warmup control from Lightning module
+`AudioLightningModuleTSE_ECHI.training_step` updates model warmup each step when supported:
+- reads `training.film_warmup_steps`
+- computes warmup factor:
+  - `warmup = min(1, (global_step + 1) / film_warmup_steps)` (or `1` if disabled)
+- calls `audio_model.set_film_warmup(warmup)`
+
+This progressively increases FiLM influence over the first training steps.
+
+### Main constructor knobs
+In `TSE_TIGER_FiLMCross`:
+- `film_scale`: FiLM modulation amplitude
+- `film_hidden`: hidden size of FiLM MLP
+- `film_init_std`: tiny gamma-branch init std for FiLM output layer
+- `film_gate_init_logit`: initial FiLM gate logit before warmup
+- `spk_num_tokens`, `spk_token_dim`, `spk_tokenizer_mode`: speaker prompt token settings for cross-attention
+
+### Expected runtime interfaces
+- `forward(input, spk_emb=...)` requires speaker embeddings.
+- `spk_emb` accepted shapes:
+  - `[D]`
+  - `[B, D]`
+  - `[B*nch, D]`
+- for `[B, D]` with multi-channel internal batching, embeddings are repeated to match `B*nch`.
+
+### Registration and config usage
+- Model class name: `TSE_TIGER_FiLMCross`
+- Registered in `look2hear/models/__init__.py`
+- Example config entry:
+  - `audionet.audionet_name: TSE_TIGER_FiLMCross`

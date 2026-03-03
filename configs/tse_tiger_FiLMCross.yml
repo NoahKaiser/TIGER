@@ -7,7 +7,7 @@ audionet:
   audionet_config:
     out_channels: 128
     in_channels: 256
-    num_blocks: 4
+    num_blocks: 12
     upsampling_depth: 5
     att_n_head: 4
     att_hid_chan: 4
@@ -92,4 +92,4 @@ datamodule:
     persistent_workers: false
 
 exp:
-  exp_name: TSE-TIGER-FiLMCross-ECHI
+  exp_name: TSE-TIGER-FiLMCross_large-ECHI
