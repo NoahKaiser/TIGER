@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=LRTuner_tse_tigerFiLM1
+#SBATCH --job-name=tse_tiger_FiLMCross
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -9,13 +9,13 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse18
+#SBATCH --nodelist=linse20
 
 
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
-#uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_film2.yml
+uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tse_tiger_FiLMCross.yml
 #uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tse_tigerFiLM2_on_Subset_TSE_ECHI.yml
 #uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
 
@@ -59,11 +59,11 @@
 
 #uv run --extra=cpu inspect_ECAPA_Embeddings.py --emb_pt /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt --meta_json /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings_meta.json
 
-uv run --extra=cu118 LRTuner.py \
-  --conf_dir configs/tiger_tse_film1.yml \
-  --accelerator gpu \
-  --devices 1 \
-  --min_lr 1e-8 \
-  --max_lr 1 \
-  --num_training 100 \
-  --plot
+#uv run --extra=cu118 LRTuner.py \
+ # --conf_dir configs/tiger_tse_film1.yml \
+ # --accelerator gpu \
+ # --devices 1 \
+  #--min_lr 1e-8 \
+ # --max_lr 1 \
+ # --num_training 100 \
+ # --plot
