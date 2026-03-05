@@ -93,6 +93,27 @@ class PairwiseNegSE_SISDR(_Loss):
 
         return -pair_wise_sdr
 
+class PairwiseMSE(_Loss):
+    def __init__(self, zero_mean=False):
+        super().__init__()
+        self.zero_mean = zero_mean
+
+    def forward(self, ests, targets):
+        if targets.size() != ests.size() or targets.ndim != 3:
+            raise TypeError(
+                f"Inputs must be of shape [batch, n_src, time], got {targets.size()} and {ests.size()} instead"
+            )
+
+        if self.zero_mean:
+            targets = targets - torch.mean(targets, dim=2, keepdim=True)
+            ests = ests - torch.mean(ests, dim=2, keepdim=True)
+
+        # Build all estimate-target pairs, then reduce over time.
+        s_target = targets.unsqueeze(1)   # [B, 1, n_src, T]
+        s_estimate = ests.unsqueeze(2)    # [B, n_src, 1, T]
+        pair_wise_mse = torch.mean((s_estimate - s_target) ** 2, dim=3)
+        return pair_wise_mse
+
 class SingleSrcNegSDR(_Loss):
     def __init__(
         self, sdr_type, zero_mean=True, take_log=True, reduction="none", EPS=1e-8
@@ -234,6 +255,7 @@ pairwise_neg_sisdr = PairwiseNegSDR("sisdr")
 pairwise_neg_sdsdr = PairwiseNegSDR("sdsdr")
 pairwise_neg_snr = PairwiseNegSDR("snr")
 pairwise_neg_se_sisdr = PairwiseNegSE_SISDR()
+pairwise_mse = PairwiseMSE()
 singlesrc_neg_sisdr = SingleSrcNegSDR("sisdr")
 singlesrc_neg_sdsdr = SingleSrcNegSDR("sdsdr")
 singlesrc_neg_snr = SingleSrcNegSDR("snr")

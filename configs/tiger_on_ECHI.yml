@@ -1,7 +1,7 @@
 #Copy of tiger-small.yml
 # Network config
 audionet:
-  audionet_name: TIGER
+  audionet_name: TSE_TIGER
   audionet_config:
     out_channels: 128
     in_channels: 256
@@ -9,13 +9,13 @@ audionet:
     upsampling_depth: 5
     win: 640
     stride: 160
-    num_sources: 1
+    num_sources: 4
 
 # Loss config
 loss:
   train:
     loss_func: PITLossWrapper
-    sdr_type: pairwise_neg_se_sisdr #pairwise_neg_snr
+    sdr_type: pairwise_mse
     config:
       pit_from: pw_mtx
       threshold_byloss: false
@@ -77,4 +77,4 @@ datamodule:
     persistent_workers: false
 
 exp:
-  exp_name: TIGER-small-on-ECHI
+  exp_name: TIGER-MSELoss-ECHI

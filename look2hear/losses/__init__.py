@@ -2,6 +2,7 @@ from .matrix import pairwise_neg_sisdr
 from .matrix import pairwise_neg_sdsdr
 from .matrix import pairwise_neg_snr
 from .matrix import pairwise_neg_se_sisdr
+from .matrix import pairwise_mse
 from .matrix import singlesrc_neg_sisdr
 from .matrix import singlesrc_neg_sdsdr
 from .matrix import singlesrc_neg_snr
@@ -31,6 +32,7 @@ __all__ = [
     "singlesrc_neg_sdsdr",
     "multisrc_neg_sdsdr",
     "pairwise_neg_snr",
+    "pairwise_mse",
     "singlesrc_neg_snr",
     "multisrc_neg_snr",
     "freq_mae_wavl1loss",
