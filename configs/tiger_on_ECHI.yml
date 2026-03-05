@@ -18,6 +18,7 @@ loss:
     sdr_type: pairwise_mse
     config:
       pit_from: pw_mtx
+      perm_reduce: active_mean
       threshold_byloss: false
   val:
     loss_func: PITLossWrapper
@@ -38,6 +39,8 @@ training:
     patience: 20
     verbose: true
   SpeedAug: False
+  lambda_res: 0.5
+  pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
     monitor: "val_loss"

@@ -4,11 +4,54 @@ from torch import nn
 from scipy.optimize import linear_sum_assignment
 
 
+def perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8):
+    """Activity-aware permutation reduction.
+
+    Args:
+        pwl_set: Pairwise loss set per permutation, shape [B, P, K].
+        target_energy: Per-target waveform energy, shape [B, K].
+        tau: Activity threshold.
+        eps: Numerical stability epsilon.
+    """
+    if target_energy is None:
+        raise ValueError("target_energy is required for perm_reduce_active_mean")
+
+    if pwl_set.ndim != 3:
+        raise ValueError(f"Expected pwl_set with shape [B, P, K], got {pwl_set.shape}")
+    if target_energy.ndim != 2:
+        raise ValueError(
+            f"Expected target_energy with shape [B, K], got {target_energy.shape}"
+        )
+
+    if pwl_set.shape[0] != target_energy.shape[0] or pwl_set.shape[2] != target_energy.shape[1]:
+        raise ValueError(
+            "Shape mismatch between pwl_set and target_energy: "
+            f"{pwl_set.shape} vs {target_energy.shape}"
+        )
+
+    active = (target_energy > tau).to(pwl_set.dtype)
+    denom = active.sum(dim=-1, keepdim=True).clamp(min=eps)
+    weights = active / denom
+    return (pwl_set * weights.unsqueeze(1)).sum(dim=-1)
+
+
+PERM_REDUCE_REGISTRY = {
+    "active_mean": perm_reduce_active_mean,
+}
+
+
 class PITLossWrapper(nn.Module):
     def __init__(
         self, loss_func, pit_from="pw_mtx", equidistant_weight=False, perm_reduce=None, threshold_byloss=True
     ):
         super().__init__()
+        if isinstance(perm_reduce, str):
+            if perm_reduce not in PERM_REDUCE_REGISTRY:
+                raise ValueError(
+                    f"Unknown perm_reduce '{perm_reduce}'. "
+                    f"Available: {sorted(PERM_REDUCE_REGISTRY.keys())}"
+                )
+            perm_reduce = PERM_REDUCE_REGISTRY[perm_reduce]
         self.loss_func = loss_func
         self.pit_from = pit_from
         self.perm_reduce = perm_reduce

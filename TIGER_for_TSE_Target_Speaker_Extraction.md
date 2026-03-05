@@ -609,3 +609,75 @@ In `TSE_TIGER_FiLMCross`:
 - Registered in `look2hear/models/__init__.py`
 - Example config entry:
   - `audionet.audionet_name: TSE_TIGER_FiLMCross`
+
+## Implemented Description: Residual-Aware PIT for ECHI (`TSE_TIGER` + `AudioLightningModuleECHI`)
+
+This repository now includes a residual-aware training path to make `TSE_TIGER` usable with ECHI sessions where:
+- multiple target positions are often silent in a segment
+- background/noise/interferers are strong
+
+The design keeps PIT for speech stems, adds an explicit residual closure term, and avoids collapse to all-zero speech masks.
+
+### 1) Model forward: speech + residual closure
+File: `look2hear/models/tiger_tse.py`
+
+- `TSE_TIGER.forward(...)` now supports `return_residual`:
+  - `False` (default): backward-compatible return `speech_hat`
+  - `True`: returns `(speech_hat, residual_hat)`
+- Shapes:
+  - `speech_hat`: `(B*nch, K, T)`
+  - `residual_hat`: `(B*nch, T)`
+- Residual is computed by closure after iSTFT:
+  - `residual_hat = mixture_wav - speech_hat.sum(dim=1)`
+
+This enforces numerical mixture consistency by construction:
+`mixture_wav == speech_hat.sum(dim=1) + residual_hat` (up to floating-point tolerance).
+
+### 2) Activity-aware PIT permutation reduction
+File: `look2hear/losses/pit_wrapper.py`
+
+- Added `perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8)`.
+- Purpose:
+  - when several targets are silent, permutation cost focuses on active targets only.
+- Expected tensors:
+  - `pwl_set`: `(B, P, K)` (permutation losses from PIT)
+  - `target_energy`: `(B, K)` with `target_energy = (targets**2).mean(time)`
+- Registration:
+  - `perm_reduce: active_mean` is resolved inside `PITLossWrapper` via a registry.
+
+### 3) Training loss integration
+File: `look2hear/system/audio_litmodule_echi.py`
+
+In `training_step`:
+1. Forward pass tries `audio_model(mixtures, return_residual=True)`; falls back safely if model does not support it.
+2. Speech PIT loss:
+   - uses `reduce_kwargs={"target_energy": (targets**2).mean(dim=2), "tau": pit_activity_tau}`
+3. Residual supervision:
+   - `residual_target = mixtures - targets.sum(dim=1)`
+   - normalized residual loss:
+     - `L_res = mean( mse(residual_hat, residual_target) / (mean(mixtures**2)+eps) )`
+4. Total loss:
+   - `L_total = L_sp + lambda_res * L_res`
+
+Logged metrics:
+- `train_loss`
+- `train_speech_loss`
+- `train_residual_loss`
+
+### 4) Config knobs used for ECHI run
+File: `configs/tiger_on_ECHI.yml`
+
+- `loss.train.config.perm_reduce: active_mean`
+- `loss.train.config.threshold_byloss: false` (important for MSE PIT)
+- `training.lambda_res: 0.5`
+- `training.pit_activity_tau: 1e-6`
+
+### 5) Minimal closure sanity test
+File: `test/test_tiger_tse_residual_closure.py`
+
+The test runs one forward pass with `return_residual=True` and checks:
+- output shapes `(1, 4, T)` and `(1, T)`
+- closure identity max error:
+  - `max|y - (sum_k speech_hat_k + residual_hat)| < 1e-4`
+
+This validates the residual closure mechanism independently of full training.

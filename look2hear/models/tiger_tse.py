@@ -583,7 +583,7 @@ class TSE_TIGER(BaseModel):
 
         return input, rest
         
-    def forward(self, input, spk_emb=None):
+    def forward(self, input, spk_emb=None, return_residual=False):
         # input shape: (B, C, T)
         was_one_d = False
         if input.ndim == 1:
@@ -596,6 +596,7 @@ class TSE_TIGER(BaseModel):
             input = input
         batch_size, nch, nsample = input.shape
         input = input.view(batch_size*nch, -1)
+        mixture_wav = input
 
         # frequency-domain separation
         spec = torch.stft(input, n_fft=self.win, hop_length=self.stride, 
@@ -641,8 +642,11 @@ class TSE_TIGER(BaseModel):
                              n_fft=self.win, hop_length=self.stride,
                              window=torch.hann_window(self.win).to(input.device).type(input.type()), length=nsample)
         output = output.view(batch_size*nch, self.num_output, -1)
+        residual_hat = mixture_wav - output.sum(dim=1)
         # if was_one_d:
         #     return output.squeeze(0)
+        if return_residual:
+            return output, residual_hat
         return output
 
     def get_model_args(self):

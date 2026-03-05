@@ -66,6 +66,10 @@ class AudioLightningModuleECHI(pl.LightningModule):
         self.save_hyperparameters(self.config_to_hparams(self.config))
         # self.print(self.audio_model)
         self.validation_step_outputs = []
+        training_cfg = self.config.get("training", {})
+        self.lambda_res = float(training_cfg.get("lambda_res", 0.0))
+        self.pit_activity_tau = float(training_cfg.get("pit_activity_tau", 1e-6))
+        self.residual_eps = 1e-8
 
         
 
@@ -76,6 +80,46 @@ class AudioLightningModuleECHI(pl.LightningModule):
             :class:`torch.Tensor`
         """
         return self.audio_model(wav)
+
+    @staticmethod
+    def _to_wave_2d(wav):
+        if wav.ndim == 2:
+            return wav
+        if wav.ndim == 3:
+            return wav.reshape(wav.shape[0] * wav.shape[1], wav.shape[2])
+        raise ValueError(f"Expected mixture waveform with 2 or 3 dims, got {wav.shape}")
+
+    def _forward_speech_and_residual(self, mixtures):
+        try:
+            model_out = self.audio_model(mixtures, return_residual=True)
+        except TypeError:
+            model_out = self.audio_model(mixtures)
+
+        if isinstance(model_out, tuple):
+            est_sources, residual_hat = model_out
+        else:
+            est_sources = model_out
+            residual_hat = self._to_wave_2d(mixtures) - est_sources.sum(dim=1)
+
+        return est_sources, residual_hat
+
+    def _compute_speech_loss(self, est_sources, targets):
+        reduce_kwargs = {
+            "target_energy": (targets ** 2).mean(dim=2),
+            "tau": self.pit_activity_tau,
+        }
+        train_loss_fn = self.loss_func["train"]
+        try:
+            return train_loss_fn(est_sources, targets, reduce_kwargs=reduce_kwargs)
+        except TypeError:
+            return train_loss_fn(est_sources, targets)
+
+    def _compute_residual_loss(self, residual_hat, mixtures, targets):
+        mixtures_2d = self._to_wave_2d(mixtures)
+        residual_target = mixtures_2d - targets.sum(dim=1)
+        num = ((residual_hat - residual_target) ** 2).mean(dim=1)
+        den = (mixtures_2d ** 2).mean(dim=1) + self.residual_eps
+        return (num / den).mean()
 
     def training_step(self, batch, batch_nb):
         mixtures, targets, _ = batch
@@ -105,14 +149,32 @@ class AudioLightningModuleECHI(pl.LightningModule):
                     
                 mixtures = targets.sum(1)
         # print(mixtures.shape)
-        est_sources = self(mixtures)
-        loss = self.loss_func["train"](est_sources, targets)
+        est_sources, residual_hat = self._forward_speech_and_residual(mixtures)
+        speech_loss = self._compute_speech_loss(est_sources, targets)
+        residual_loss = self._compute_residual_loss(residual_hat, mixtures, targets)
+        loss = speech_loss + self.lambda_res * residual_loss
 
         self.log(
             "train_loss",
             loss,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
+            logger=True,
+        )
+        self.log(
+            "train_speech_loss",
+            speech_loss,
+            on_epoch=True,
+            prog_bar=False,
+            sync_dist=True,
+            logger=True,
+        )
+        self.log(
+            "train_residual_loss",
+            residual_loss,
+            on_epoch=True,
+            prog_bar=False,
             sync_dist=True,
             logger=True,
         )
