@@ -56,17 +56,18 @@ class AudioLightningModuleECHI(pl.LightningModule):
         self.test_loader = test_loader
         self.scheduler = scheduler
         self.config = {} if config is None else config
+        training_cfg = self.config.get("training", {})
+        checkpoint_cfg = training_cfg.get("checkpoint", {})
+        self.default_monitor = checkpoint_cfg.get("monitor", "val_loss")
         # Speed Aug
         self.speedperturb = SpeedPerturb(
             self.config["datamodule"]["data_config"]["sample_rate"],
             speeds=[95, 100, 105]
         )
         # Save lightning"s AttributeDict under self.hparams
-        self.default_monitor = "val_loss"
         self.save_hyperparameters(self.config_to_hparams(self.config))
         # self.print(self.audio_model)
         self.validation_step_outputs = []
-        training_cfg = self.config.get("training", {})
         self.lambda_res = float(training_cfg.get("lambda_res", 0.0))
         self.pit_activity_tau = float(training_cfg.get("pit_activity_tau", 1e-6))
         self.residual_eps = 1e-8
@@ -185,8 +186,11 @@ class AudioLightningModuleECHI(pl.LightningModule):
     def validation_step(self, batch, batch_nb):
             mixtures, targets, _ = batch
             # print(mixtures.shape)
-            est_sources = self(mixtures)
+            est_sources, residual_hat = self._forward_speech_and_residual(mixtures)
             loss = self.loss_func["val"](est_sources, targets)
+            speech_loss = self._compute_speech_loss(est_sources, targets)
+            residual_loss = self._compute_residual_loss(residual_hat, mixtures, targets)
+            total_loss = speech_loss + self.lambda_res * residual_loss
             self.log(
                 "val_loss",
                 loss,
@@ -195,10 +199,39 @@ class AudioLightningModuleECHI(pl.LightningModule):
                 sync_dist=True,
                 logger=True,
             )
+            self.log(
+                "val_speech_loss",
+                speech_loss,
+                on_epoch=True,
+                prog_bar=False,
+                sync_dist=True,
+                logger=True,
+            )
+            self.log(
+                "val_residual_loss",
+                residual_loss,
+                on_epoch=True,
+                prog_bar=False,
+                sync_dist=True,
+                logger=True,
+            )
+            self.log(
+                "val_total_loss",
+                total_loss,
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
+                logger=True,
+            )
             
             self.validation_step_outputs.append(loss)
             
-            return {"val_loss": loss}
+            return {
+                "val_loss": loss,
+                "val_speech_loss": speech_loss,
+                "val_residual_loss": residual_loss,
+                "val_total_loss": total_loss,
+            }
 
 
 
