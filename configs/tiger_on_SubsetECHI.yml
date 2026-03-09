@@ -15,7 +15,7 @@ audionet:
 loss:
   train:
     loss_func: PITLossWrapper
-    sdr_type: pairwise_neg_se_sisdr #old:pairwise_neg_snr
+    sdr_type: pairwise_neg_sisdr
     config:
       pit_from: pw_mtx
       threshold_byloss: false
@@ -38,9 +38,11 @@ training:
     #patience: 20
     #verbose: true
   SpeedAug: False
+  lambda_res: 0.5
+  pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
-    monitor: "val_loss"
+    monitor: "val_speech_loss"
     mode: "min"
     save_top_k: 5
     save_last: true
@@ -50,7 +52,7 @@ training:
 # Optim config
 optimizer:
   optim_name: adam
-  lr: 0.001 #original lr=0.001, try smaller lr
+  lr: 0.0005 #original lr=0.001, try smaller lr
   weight_decay: 0
 
 # Sche config
@@ -65,7 +67,7 @@ datamodule:
   data_name: ECHIDataModule
   data_config: #important: add the path to the Preprocessed dataset where the json files are located
     train_dir: /no_backups/s1495/Processed_ECHI/ha/train
-    valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
+    valid_dir: /no_backups/s1495/Processed_ECHI/ha/train #validation on overfittet taining set
     test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
     n_src: 4
     sample_rate: 16000
@@ -75,6 +77,13 @@ datamodule:
     num_workers: 8
     pin_memory: true
     persistent_workers: false
-
+subset:
+  train_indices: [8, 20000, 40000, 60000]
+  val_indices: [8, 20000, 40000, 60000]
+  test_indices: null
+  n_train: null
+  n_val: null
+  n_test: null
+  shuffle: false
 exp:
-  exp_name: TIGER_TSE_on_Subset-ECHI_
+  exp_name: TIGER_TSE_on_Subset-ECHI

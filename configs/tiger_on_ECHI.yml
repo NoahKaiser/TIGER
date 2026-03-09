@@ -21,8 +21,8 @@ loss:
       perm_reduce: active_mean
       threshold_byloss: false
   val:
-    loss_func: PITLossWrapper
-    sdr_type: pairwise_neg_se_sisdr #pairwise_neg_sisdr
+    loss_func: PITLossWrapper       #validation loss uses same loss function as training loss (see LightningModuleECHI)
+    sdr_type: pairwise_neg_se_sisdr #additional validation metric, but not used for early stopping or checkpointing
     config:
       pit_from: pw_mtx
       threshold_byloss: false
@@ -34,7 +34,7 @@ training:
   parallel: ddp
   epochs: 500
   early_stop:
-    monitor: val_total_loss
+    monitor: val_speech_loss
     mode: min
     patience: 20
     verbose: true
@@ -43,7 +43,7 @@ training:
   pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
-    monitor: "val_total_loss"
+    monitor: "val_speech_loss"
     mode: "min"
     save_top_k: 5
     save_last: true
