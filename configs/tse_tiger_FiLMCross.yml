@@ -86,7 +86,7 @@ datamodule:
     segment: 3.0
     only_valid_speech_region: true
     valid_speech_metadata_root: /data/public/CHiME9/metadata/ref
-    batch_size: 2
+    batch_size: 1
     num_workers: 8
     pin_memory: true
     persistent_workers: false

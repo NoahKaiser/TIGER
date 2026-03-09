@@ -15,7 +15,7 @@ audionet:
 loss:
   train:
     loss_func: PITLossWrapper
-    sdr_type: pairwise_mse
+    sdr_type: pairwise_neg_sisdr #pairwise_mse
     config:
       pit_from: pw_mtx
       perm_reduce: active_mean
@@ -34,7 +34,7 @@ training:
   parallel: ddp
   epochs: 500
   early_stop:
-    monitor: val_loss
+    monitor: val_total_loss
     mode: min
     patience: 20
     verbose: true
@@ -43,7 +43,7 @@ training:
   pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
-    monitor: "val_loss"
+    monitor: "val_total_loss"
     mode: "min"
     save_top_k: 5
     save_last: true
@@ -80,4 +80,4 @@ datamodule:
     persistent_workers: false
 
 exp:
-  exp_name: TIGER-MSELoss-ECHI
+  exp_name: TIGER-ECHI-activity-aware_PIT_residual_closure
