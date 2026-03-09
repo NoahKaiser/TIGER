@@ -231,7 +231,7 @@ class ECHIDataModule(object):
             sample_rate=self.sample_rate,
             segment=self.segment,
             hop=self.hop,
-            pad_last=True,       # val/test: full coverage if desired
+            pad_last=False,       # val/test: full coverage if desired
         )
         self.data_test = ECHIDataset(
             json_dir=self.test_dir,
@@ -239,7 +239,7 @@ class ECHIDataModule(object):
             sample_rate=self.sample_rate,
             segment=self.segment,
             hop=self.hop,
-            pad_last=True,
+            pad_last=False,
         )
 
     @property
