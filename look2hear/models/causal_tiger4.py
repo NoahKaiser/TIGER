@@ -786,6 +786,7 @@ class CausalTIGER4(BaseModel):
         analysis_win=None,
         synthesis_win=None,
         look_ahead=0,
+        window_floor=1e-5,
         num_sources=2,
         sample_rate=44100,
     ):
@@ -797,6 +798,7 @@ class CausalTIGER4(BaseModel):
         self.analysis_win = self.win if analysis_win is None else analysis_win
         self.synthesis_win = self.analysis_win if synthesis_win is None else synthesis_win
         self.look_ahead = look_ahead
+        self.window_floor = window_floor
 
         if self.analysis_win <= 0 or self.synthesis_win <= 0 or self.stride <= 0:
             raise ValueError("analysis_win, synthesis_win and stride must be positive integers.")
@@ -806,6 +808,8 @@ class CausalTIGER4(BaseModel):
             raise ValueError("synthesis_win must be <= n_fft (win).")
         if self.look_ahead < 0:
             raise ValueError("look_ahead must be >= 0.")
+        if self.window_floor < 0:
+            raise ValueError("window_floor must be >= 0.")
 
         self.group = self.win // 2
         self.enc_dim = self.win // 2 + 1
@@ -859,6 +863,15 @@ class CausalTIGER4(BaseModel):
         if rest > 0:
             input = F.pad(input, (0, rest))
         return input, rest
+
+    def _safe_hann_window(self, win_length, device, dtype):
+        """
+        Build a Hann window safe for center=False ISTFT overlap-add checks.
+        """
+        window = torch.hann_window(win_length, device=device, dtype=dtype)
+        if self.window_floor > 0:
+            window = window.clamp_min(self.window_floor)
+        return window
         
     def forward(self, input):
         # input shape: (B, C, T)
@@ -875,6 +888,8 @@ class CausalTIGER4(BaseModel):
         input = input.view(batch_size*nch, -1)
         input, pad_right = self.pad_input(input)
         proc_nsample = input.shape[-1]
+        analysis_window = self._safe_hann_window(self.analysis_win, input.device, input.dtype)
+        synthesis_window = self._safe_hann_window(self.synthesis_win, input.device, input.dtype)
 
         # frequency-domain separation
         spec = torch.stft(
@@ -882,7 +897,7 @@ class CausalTIGER4(BaseModel):
             n_fft=self.win,
             hop_length=self.stride,
             win_length=self.analysis_win,
-            window=torch.hann_window(self.analysis_win).to(input.device).type(input.type()),
+            window=analysis_window,
             center=False,
             normalized=False,
             onesided=True,
@@ -932,7 +947,7 @@ class CausalTIGER4(BaseModel):
             n_fft=self.win,
             hop_length=self.stride,
             win_length=self.synthesis_win,
-            window=torch.hann_window(self.synthesis_win).to(input.device).type(input.type()),
+            window=synthesis_window,
             center=False,
             normalized=False,
             onesided=True,
