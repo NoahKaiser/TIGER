@@ -2,6 +2,7 @@ from .tiger import TIGER
 from .causal_tiger import CausalTIGER
 from .causal_tiger2 import CausalTIGER2
 from .causal_tiger3 import CausalTIGER3
+from .causal_tiger4 import CausalTIGER4
 from .tiger_tse import TSE_TIGER
 from .tiger_tse_FiLM1 import TSE_TIGER_FiLM1
 from .tiger_tse_FiLM2 import TSE_TIGER_FiLM2
@@ -16,6 +17,7 @@ __all__ = [
     "CausalTIGER",
     "CausalTIGER2",
     "CausalTIGER3",
+    "CausalTIGER4",
     "TSE_TIGER",
     "TSE_TIGER_FiLM1",
     "TSE_TIGER_FiLM2",
