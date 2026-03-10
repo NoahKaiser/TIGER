@@ -74,6 +74,7 @@ def check_causality_torch_model(
     min_len_s=2.0,
     max_len_s=8.0,
     seed=None,
+    return_details=False,
 ):
     """Convenience helper to run check_causality directly on a PyTorch model."""
     wrapped_model = make_torch_source_wrapper(model, source_idx=source_idx, device=device)
@@ -85,6 +86,7 @@ def check_causality_torch_model(
         min_len_s=min_len_s,
         max_len_s=max_len_s,
         seed=seed,
+        return_details=return_details,
     )
 
 
@@ -96,6 +98,7 @@ def check_causality(
     min_len_s=2.0,
     max_len_s=8.0,
     seed=None,
+    return_details=False,
 ):
     """
     :param model: callable mapping 1D np.ndarray -> 1D np.ndarray (same length)
@@ -105,6 +108,7 @@ def check_causality(
     :param min_len_s: minimum signal duration in seconds
     :param max_len_s: maximum signal duration in seconds
     :param seed: optional random seed for reproducibility
+    :param return_details: if True, return a report dict instead of only pass/fail bool
 
     The idea is that we set samples starting from a random position to NaN,
     and a model that peeks into future context propagates NaNs too early.
@@ -122,7 +126,15 @@ def check_causality(
         raise ValueError("min_len_s must be <= max_len_s.")
 
     rng = np.random.default_rng(seed)
-    algo_lat = int(algo_lat * sr)
+    allowed_lat_samples = int(algo_lat * sr)
+
+    # Estimate minimal required latency (in samples) across randomized trials.
+    # For one trial with NaN boundary p and first NaN output at f:
+    #   required_latency_samples = max(0, p - f + 1)
+    # Taking the maximum over trials gives a conservative estimate.
+    est_lat_samples = 0
+    saw_any_output_nan = False
+    worst_case = None
 
     for r in range(num_trials):
         l = rng.uniform(low=min_len_s, high=max_len_s)
@@ -135,15 +147,63 @@ def check_causality(
         est_sig = model(sig)  # obtain separation results using your model
         assert est_sig.shape == sig.shape  # they should have same length
 
-        if p - algo_lat + 1 >= 1 and np.sum(np.isnan(est_sig[: p - algo_lat + 1])) > 0:
-            print(
-                "For example %d, your model does NOT satisfy the algorithmic latency requirement!"
-                % r
-            )
-            return False
+        nan_positions = np.flatnonzero(np.isnan(est_sig))
+        first_nan = int(nan_positions[0]) if nan_positions.size > 0 else None
+        if first_nan is not None:
+            saw_any_output_nan = True
+            required_lat_samples = max(0, p - first_nan + 1)
+        else:
+            required_lat_samples = 0
 
-    print("Your model satisfies the algorithmic latency requirement!")
-    return True
+        if required_lat_samples > est_lat_samples:
+            est_lat_samples = required_lat_samples
+            worst_case = {
+                "trial": r,
+                "nan_boundary_p": int(p),
+                "first_output_nan": first_nan,
+                "required_latency_samples": int(required_lat_samples),
+            }
+
+    est_lat_seconds = est_lat_samples / float(sr)
+    passes_requirement = est_lat_samples <= allowed_lat_samples
+
+    print(
+        "Estimated algorithmic latency: "
+        f"{est_lat_samples} samples ({est_lat_seconds * 1000.0:.3f} ms)"
+    )
+    print(
+        "Allowed algorithmic latency: "
+        f"{allowed_lat_samples} samples ({algo_lat * 1000.0:.3f} ms)"
+    )
+    if not saw_any_output_nan:
+        print(
+            "Warning: No NaNs were observed in model outputs across all trials; "
+            "the estimate may be a lower bound for this test method."
+        )
+    if passes_requirement:
+        print("Your model satisfies the algorithmic latency requirement!")
+    else:
+        print("Your model does NOT satisfy the algorithmic latency requirement!")
+        if worst_case is not None:
+            print(
+                "Worst case: trial={trial}, p={nan_boundary_p}, first_output_nan={first_output_nan}, "
+                "required={required_latency_samples} samples".format(**worst_case)
+            )
+
+    report = {
+        "passes_requirement": bool(passes_requirement),
+        "estimated_latency_samples": int(est_lat_samples),
+        "estimated_latency_seconds": float(est_lat_seconds),
+        "allowed_latency_samples": int(allowed_lat_samples),
+        "allowed_latency_seconds": float(algo_lat),
+        "num_trials": int(num_trials),
+        "sample_rate": int(sr),
+        "saw_any_output_nan": bool(saw_any_output_nan),
+        "worst_case": worst_case,
+    }
+    if return_details:
+        return report
+    return bool(passes_requirement)
 
 
 def _load_model_from_args(args):
