@@ -75,6 +75,9 @@ def check_causality_torch_model(
     max_len_s=8.0,
     seed=None,
     return_details=False,
+    method="nan",
+    diff_rtol=1e-4,
+    diff_atol=1e-6,
 ):
     """Convenience helper to run check_causality directly on a PyTorch model."""
     wrapped_model = make_torch_source_wrapper(model, source_idx=source_idx, device=device)
@@ -87,6 +90,9 @@ def check_causality_torch_model(
         max_len_s=max_len_s,
         seed=seed,
         return_details=return_details,
+        method=method,
+        diff_rtol=diff_rtol,
+        diff_atol=diff_atol,
     )
 
 
@@ -99,6 +105,9 @@ def check_causality(
     max_len_s=8.0,
     seed=None,
     return_details=False,
+    method="nan",
+    diff_rtol=1e-4,
+    diff_atol=1e-6,
 ):
     """
     :param model: callable mapping 1D np.ndarray -> 1D np.ndarray (same length)
@@ -109,6 +118,9 @@ def check_causality(
     :param max_len_s: maximum signal duration in seconds
     :param seed: optional random seed for reproducibility
     :param return_details: if True, return a report dict instead of only pass/fail bool
+    :param method: "nan" (original NaN-propagation test) or "perturb" (finite perturbation test)
+    :param diff_rtol: relative tolerance for perturbation output comparison
+    :param diff_atol: absolute tolerance for perturbation output comparison
 
     The idea is that we set samples starting from a random position to NaN,
     and a model that peeks into future context propagates NaNs too early.
@@ -124,6 +136,10 @@ def check_causality(
         raise ValueError("min_len_s and max_len_s must be > 0.")
     if min_len_s > max_len_s:
         raise ValueError("min_len_s must be <= max_len_s.")
+    if method not in {"nan", "perturb"}:
+        raise ValueError(f'Unsupported method="{method}". Use "nan" or "perturb".')
+    if diff_rtol < 0 or diff_atol < 0:
+        raise ValueError("diff_rtol and diff_atol must be >= 0.")
 
     rng = np.random.default_rng(seed)
     allowed_lat_samples = int(algo_lat * sr)
@@ -134,6 +150,7 @@ def check_causality(
     # Taking the maximum over trials gives a conservative estimate.
     est_lat_samples = 0
     saw_any_output_nan = False
+    saw_any_output_diff = False
     worst_case = None
 
     for r in range(num_trials):
@@ -142,25 +159,53 @@ def check_causality(
         sig = rng.standard_normal(l)
         sig = sig / np.max(np.abs(sig)) * 0.9
         p = int(rng.integers(len(sig)))
-        sig[p:] = np.nan
+        meta = {}
 
-        est_sig = model(sig)  # obtain separation results using your model
-        assert est_sig.shape == sig.shape  # they should have same length
+        if method == "nan":
+            sig_test = sig.copy()
+            sig_test[p:] = np.nan
+            est_sig = model(sig_test)  # obtain separation results using your model
+            assert est_sig.shape == sig.shape  # they should have same length
 
-        nan_positions = np.flatnonzero(np.isnan(est_sig))
-        first_nan = int(nan_positions[0]) if nan_positions.size > 0 else None
-        if first_nan is not None:
-            saw_any_output_nan = True
-            required_lat_samples = max(0, p - first_nan + 1)
+            nan_positions = np.flatnonzero(np.isnan(est_sig))
+            first_hit = int(nan_positions[0]) if nan_positions.size > 0 else None
+            if first_hit is not None:
+                saw_any_output_nan = True
+                required_lat_samples = max(0, p - first_hit + 1)
+            else:
+                required_lat_samples = 0
+            meta["first_event_kind"] = "first_output_nan"
         else:
-            required_lat_samples = 0
+            sig_ref = sig.copy()
+            sig_alt = sig.copy()
+            alt_tail = rng.standard_normal(len(sig_alt) - p)
+            if alt_tail.size > 0:
+                alt_tail = alt_tail / (np.max(np.abs(alt_tail)) + 1e-12) * 0.9
+                sig_alt[p:] = alt_tail.astype(np.float32)
+
+            out_ref = model(sig_ref)
+            out_alt = model(sig_alt)
+            assert out_ref.shape == sig.shape
+            assert out_alt.shape == sig.shape
+
+            # Earliest sample that changes when only future input (>= p) changes.
+            # For causal models, this should occur no earlier than p - latency + 1.
+            changed = ~np.isclose(out_ref, out_alt, rtol=diff_rtol, atol=diff_atol)
+            diff_positions = np.flatnonzero(changed)
+            first_hit = int(diff_positions[0]) if diff_positions.size > 0 else None
+            if first_hit is not None:
+                saw_any_output_diff = True
+                required_lat_samples = max(0, p - first_hit + 1)
+            else:
+                required_lat_samples = 0
+            meta["first_event_kind"] = "first_output_diff"
 
         if required_lat_samples > est_lat_samples:
             est_lat_samples = required_lat_samples
             worst_case = {
                 "trial": r,
-                "nan_boundary_p": int(p),
-                "first_output_nan": first_nan,
+                "boundary_p": int(p),
+                meta["first_event_kind"]: first_hit,
                 "required_latency_samples": int(required_lat_samples),
             }
 
@@ -175,22 +220,30 @@ def check_causality(
         "Allowed algorithmic latency: "
         f"{allowed_lat_samples} samples ({algo_lat * 1000.0:.3f} ms)"
     )
-    if not saw_any_output_nan:
-        print(
-            "Warning: No NaNs were observed in model outputs across all trials; "
-            "the estimate may be a lower bound for this test method."
-        )
+    if method == "nan" and not saw_any_output_nan:
+        print("Warning: No NaNs were observed in model outputs across all trials.")
+    if method == "perturb" and not saw_any_output_diff:
+        print("Warning: No output changes were observed across perturbation trials.")
     if passes_requirement:
         print("Your model satisfies the algorithmic latency requirement!")
     else:
         print("Your model does NOT satisfy the algorithmic latency requirement!")
         if worst_case is not None:
             print(
-                "Worst case: trial={trial}, p={nan_boundary_p}, first_output_nan={first_output_nan}, "
+                "Worst case: trial={trial}, p={boundary_p}, "
                 "required={required_latency_samples} samples".format(**worst_case)
             )
+            if method == "nan":
+                print(
+                    f"  first_output_nan={worst_case.get('first_output_nan')}"
+                )
+            else:
+                print(
+                    f"  first_output_diff={worst_case.get('first_output_diff')}"
+                )
 
     report = {
+        "method": method,
         "passes_requirement": bool(passes_requirement),
         "estimated_latency_samples": int(est_lat_samples),
         "estimated_latency_seconds": float(est_lat_seconds),
@@ -199,6 +252,9 @@ def check_causality(
         "num_trials": int(num_trials),
         "sample_rate": int(sr),
         "saw_any_output_nan": bool(saw_any_output_nan),
+        "saw_any_output_diff": bool(saw_any_output_diff),
+        "diff_rtol": float(diff_rtol),
+        "diff_atol": float(diff_atol),
         "worst_case": worst_case,
     }
     if return_details:
@@ -317,6 +373,25 @@ def _parse_args():
     parser.add_argument("--min_len_s", type=float, default=2.0, help="Min random signal length.")
     parser.add_argument("--max_len_s", type=float, default=8.0, help="Max random signal length.")
     parser.add_argument("--seed", type=int, default=None, help="Optional random seed.")
+    parser.add_argument(
+        "--method",
+        type=str,
+        choices=["nan", "perturb"],
+        default="nan",
+        help='Latency estimation method: "nan" (legacy) or "perturb" (recommended for attention models).',
+    )
+    parser.add_argument(
+        "--diff_rtol",
+        type=float,
+        default=1e-4,
+        help="Relative tolerance used in perturbation comparison (method=perturb).",
+    )
+    parser.add_argument(
+        "--diff_atol",
+        type=float,
+        default=1e-6,
+        help="Absolute tolerance used in perturbation comparison (method=perturb).",
+    )
     return parser.parse_args()
 
 
@@ -334,7 +409,7 @@ def main():
 
     print(
         f"Running causality check for {model_name} | sr={sr} | algo_lat={args.algo_lat}s | "
-        f"source_idx={args.source_idx} | device={device}"
+        f"source_idx={args.source_idx} | device={device} | method={args.method}"
     )
     ok = check_causality_torch_model(
         model=model,
@@ -346,6 +421,9 @@ def main():
         min_len_s=args.min_len_s,
         max_len_s=args.max_len_s,
         seed=args.seed,
+        method=args.method,
+        diff_rtol=args.diff_rtol,
+        diff_atol=args.diff_atol,
     )
     raise SystemExit(0 if ok else 1)
 
