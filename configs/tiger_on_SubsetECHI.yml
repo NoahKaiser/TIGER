@@ -18,6 +18,7 @@ loss:
     sdr_type: pairwise_neg_sisdr
     config:
       pit_from: pw_mtx
+      perm_reduce: active_mean
       threshold_byloss: false
   val:
     loss_func: PITLossWrapper
@@ -31,14 +32,14 @@ training:
   system: AudioLightningModuleECHI
   gpus: [0]
   parallel: ddp
-  epochs: 10000 # 500
+  epochs: 100000 # 500
   early_stop: null
     #monitor: val_loss
     #mode: min
     #patience: 20
     #verbose: true
   SpeedAug: False
-  lambda_res: 0.5
+  lambda_res: 0
   pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
@@ -78,12 +79,12 @@ datamodule:
     pin_memory: true
     persistent_workers: false
 subset:
-  train_indices: [8, 20000, 40000, 60000]
-  val_indices: [8, 20000, 40000, 60000]
+  train_indices: [8, 1000, 2000, 4000]
+  val_indices: [8, 1000, 2000, 4000]
   test_indices: null
   n_train: null
   n_val: null
   n_test: null
-  shuffle: false
+  shuffle_train: false
 exp:
   exp_name: TIGER_TSE_on_Subset-ECHI

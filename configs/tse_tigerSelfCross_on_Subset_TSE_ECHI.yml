@@ -79,12 +79,12 @@ datamodule:
     pin_memory: true
     persistent_workers: false
 subset:
-  train_indices: [8]
-  val_indices: [8]
+  train_indices: [8, 1000, 2000, 4000]
+  val_indices: [8, 1000, 2000, 4000]
   test_indices: null
   n_train: null
   n_val: null
   n_test: null
-  shuffle: false
+  shuffle_train: false
 exp:
   exp_name: TSE_TIGER_SelfCross_on_Subset-TSE_ECHI
