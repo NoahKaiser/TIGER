@@ -867,11 +867,23 @@ class CausalTIGER4(BaseModel):
     def _safe_hann_window(self, win_length, device, dtype):
         """
         Build a Hann window safe for center=False ISTFT overlap-add checks.
+
+        For center=False and win_length < n_fft, PyTorch pads the provided
+        window with zeros internally, which can violate overlap-add checks in
+        torch.istft. To avoid this, we explicitly construct an n_fft-sized
+        window and place the shorter Hann window in its center, while keeping
+        a small positive floor elsewhere.
         """
-        window = torch.hann_window(win_length, device=device, dtype=dtype)
-        if self.window_floor > 0:
-            window = window.clamp_min(self.window_floor)
-        return window
+        floor = max(self.window_floor, torch.finfo(dtype).eps)
+        short_window = torch.hann_window(win_length, device=device, dtype=dtype).clamp_min(floor)
+
+        if win_length == self.win:
+            return short_window, self.win
+
+        full_window = torch.full((self.win,), floor, device=device, dtype=dtype)
+        left_pad = (self.win - win_length) // 2
+        full_window[left_pad:left_pad + win_length] = short_window
+        return full_window, self.win
         
     def forward(self, input):
         # input shape: (B, C, T)
@@ -888,15 +900,19 @@ class CausalTIGER4(BaseModel):
         input = input.view(batch_size*nch, -1)
         input, pad_right = self.pad_input(input)
         proc_nsample = input.shape[-1]
-        analysis_window = self._safe_hann_window(self.analysis_win, input.device, input.dtype)
-        synthesis_window = self._safe_hann_window(self.synthesis_win, input.device, input.dtype)
+        analysis_window, analysis_win_length = self._safe_hann_window(
+            self.analysis_win, input.device, input.dtype
+        )
+        synthesis_window, synthesis_win_length = self._safe_hann_window(
+            self.synthesis_win, input.device, input.dtype
+        )
 
         # frequency-domain separation
         spec = torch.stft(
             input,
             n_fft=self.win,
             hop_length=self.stride,
-            win_length=self.analysis_win,
+            win_length=analysis_win_length,
             window=analysis_window,
             center=False,
             normalized=False,
@@ -946,7 +962,7 @@ class CausalTIGER4(BaseModel):
             sep_subband_spec.view(batch_size*nch*self.num_output, self.enc_dim, -1),
             n_fft=self.win,
             hop_length=self.stride,
-            win_length=self.synthesis_win,
+            win_length=synthesis_win_length,
             window=synthesis_window,
             center=False,
             normalized=False,
