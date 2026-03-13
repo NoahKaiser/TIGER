@@ -70,6 +70,9 @@ class AudioLightningModuleECHI(pl.LightningModule):
         self.validation_step_outputs = []
         self.lambda_res = float(training_cfg.get("lambda_res", 0.0))
         self.pit_activity_tau = float(training_cfg.get("pit_activity_tau", 1e-6))
+        self.pit_activity_gamma = float(training_cfg.get("pit_activity_gamma", 0.05))
+        self.pit_activity_beta = float(training_cfg.get("pit_activity_beta", 8.0))
+        self.pit_silence_weight = float(training_cfg.get("pit_silence_weight", 0.1))
         self.residual_eps = 1e-8
 
         
@@ -108,12 +111,23 @@ class AudioLightningModuleECHI(pl.LightningModule):
         reduce_kwargs = {
             "target_energy": (targets ** 2).mean(dim=2),
             "tau": self.pit_activity_tau,
+            "gamma": self.pit_activity_gamma,
+        }
+        loss_kwargs = {
+            "activity_tau": self.pit_activity_tau,
+            "activity_beta": self.pit_activity_beta,
+            "silence_weight": self.pit_silence_weight,
         }
         train_loss_fn = self.loss_func["train"]
         try:
-            return train_loss_fn(est_sources, targets, reduce_kwargs=reduce_kwargs)
+            return train_loss_fn(
+                est_sources, targets, reduce_kwargs=reduce_kwargs, **loss_kwargs
+            )
         except TypeError:
-            return train_loss_fn(est_sources, targets)
+            try:
+                return train_loss_fn(est_sources, targets, reduce_kwargs=reduce_kwargs)
+            except TypeError:
+                return train_loss_fn(est_sources, targets)
 
     def _compute_residual_loss(self, residual_hat, mixtures, targets):
         mixtures_2d = self._to_wave_2d(mixtures)

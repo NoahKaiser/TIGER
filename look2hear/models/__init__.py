@@ -4,6 +4,7 @@ from .causal_tiger2 import CausalTIGER2
 from .causal_tiger3 import CausalTIGER3
 from .causal_tiger4 import CausalTIGER4
 from .tiger_tse import TSE_TIGER
+from .tiger_tse2 import TSE_TIGER2
 from .tiger_tse_FiLM1 import TSE_TIGER_FiLM1
 from .tiger_tse_FiLM2 import TSE_TIGER_FiLM2
 from .tiger_tse_FiLMCross import TSE_TIGER_FiLMCross
@@ -19,6 +20,7 @@ __all__ = [
     "CausalTIGER3",
     "CausalTIGER4",
     "TSE_TIGER",
+    "TSE_TIGER2",
     "TSE_TIGER_FiLM1",
     "TSE_TIGER_FiLM2",
     "TSE_TIGER_FiLMCross",

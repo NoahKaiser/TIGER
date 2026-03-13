@@ -1,4 +1,5 @@
 import torch
+import math
 from torch.nn.modules.loss import _Loss
 
 
@@ -92,6 +93,83 @@ class PairwiseNegSE_SISDR(_Loss):
             pair_wise_sdr = 10 * torch.log10(pair_wise_sdr)
 
         return -pair_wise_sdr
+
+
+class PairwiseNegSISDRSilenceAware(_Loss):
+    """Pairwise loss for sparse activity mixtures.
+
+    - Active targets: SI-SDR term.
+    - Inactive targets: estimate-to-zero energy penalty.
+    - A soft activity gate interpolates between both losses.
+    """
+
+    def __init__(
+        self,
+        zero_mean=True,
+        take_log=True,
+        activity_tau=1e-6,
+        activity_beta=8.0,
+        silence_weight=0.1,
+        EPS=1e-8,
+    ):
+        super().__init__()
+        self.zero_mean = zero_mean
+        self.take_log = take_log
+        self.activity_tau = activity_tau
+        self.activity_beta = activity_beta
+        self.silence_weight = silence_weight
+        self.EPS = EPS
+
+    def forward(
+        self,
+        ests,
+        targets,
+        activity_tau=None,
+        activity_beta=None,
+        silence_weight=None,
+    ):
+        if targets.size() != ests.size() or targets.ndim != 3:
+            raise TypeError(
+                f"Inputs must be of shape [batch, n_src, time], got {targets.size()} and {ests.size()} instead"
+            )
+
+        tau = self.activity_tau if activity_tau is None else float(activity_tau)
+        beta = self.activity_beta if activity_beta is None else float(activity_beta)
+        sil_w = self.silence_weight if silence_weight is None else float(silence_weight)
+        tau = max(tau, self.EPS)
+
+        if self.zero_mean:
+            targets = targets - torch.mean(targets, dim=2, keepdim=True)
+            ests = ests - torch.mean(ests, dim=2, keepdim=True)
+
+        # Pairwise broadcast: targets -> [B, 1, n_src, T], ests -> [B, n_src, 1, T]
+        s_target = targets.unsqueeze(1)
+        s_estimate = ests.unsqueeze(2)
+
+        # Active-target SI-SDR branch.
+        pair_wise_dot = torch.sum(s_estimate * s_target, dim=3, keepdim=True)
+        s_target_energy = torch.sum(s_target ** 2, dim=3, keepdim=True) + self.EPS
+        pair_wise_proj = pair_wise_dot * s_target / s_target_energy
+        e_noise = s_estimate - pair_wise_proj
+        ratio = torch.sum(pair_wise_proj ** 2, dim=3) / (
+            torch.sum(e_noise ** 2, dim=3) + self.EPS
+        )
+        if self.take_log:
+            active_loss = -10.0 * torch.log10(ratio + self.EPS)
+        else:
+            active_loss = -ratio
+
+        # Silent-target branch: explicit estimate energy penalty.
+        silence_loss = torch.mean(s_estimate ** 2, dim=3).expand_as(active_loss)
+
+        # Soft gate from target energy (log-energy domain for robustness).
+        target_energy = torch.mean(s_target ** 2, dim=3).clamp(min=self.EPS)  # [B,1,n_src]
+        tau_log = target_energy.new_tensor(math.log(tau))
+        activity_logits = beta * (torch.log(target_energy) - tau_log)
+        activity = torch.sigmoid(activity_logits).expand_as(active_loss)
+
+        return activity * active_loss + (1.0 - activity) * (sil_w * silence_loss)
+
 
 class PairwiseMSE(_Loss):
     def __init__(self, zero_mean=False):
@@ -255,6 +333,7 @@ pairwise_neg_sisdr = PairwiseNegSDR("sisdr")
 pairwise_neg_sdsdr = PairwiseNegSDR("sdsdr")
 pairwise_neg_snr = PairwiseNegSDR("snr")
 pairwise_neg_se_sisdr = PairwiseNegSE_SISDR()
+pairwise_neg_sisdr_silence_aware = PairwiseNegSISDRSilenceAware()
 pairwise_mse = PairwiseMSE()
 singlesrc_neg_sisdr = SingleSrcNegSDR("sisdr")
 singlesrc_neg_sdsdr = SingleSrcNegSDR("sdsdr")

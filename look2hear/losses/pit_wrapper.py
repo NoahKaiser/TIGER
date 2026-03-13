@@ -4,7 +4,7 @@ from torch import nn
 from scipy.optimize import linear_sum_assignment
 
 
-def perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8):
+def perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8, gamma=None):
     """Activity-aware permutation reduction.
 
     Args:
@@ -35,8 +35,45 @@ def perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8):
     return (pwl_set * weights.unsqueeze(1)).sum(dim=-1)
 
 
+def perm_reduce_active_soft_mean(
+    pwl_set, target_energy, tau=1e-6, gamma=0.05, eps=1e-8
+):
+    """Activity-aware reduction with a non-zero floor for inactive targets.
+
+    Args:
+        pwl_set: Pairwise loss set per permutation, shape [B, P, K].
+        target_energy: Per-target waveform energy, shape [B, K].
+        tau: Activity threshold.
+        gamma: Inactive target floor weight (>0 keeps learning on silent regions).
+        eps: Numerical stability epsilon.
+    """
+    if target_energy is None:
+        raise ValueError("target_energy is required for perm_reduce_active_soft_mean")
+
+    if pwl_set.ndim != 3:
+        raise ValueError(f"Expected pwl_set with shape [B, P, K], got {pwl_set.shape}")
+    if target_energy.ndim != 2:
+        raise ValueError(
+            f"Expected target_energy with shape [B, K], got {target_energy.shape}"
+        )
+    if gamma < 0:
+        raise ValueError(f"Expected gamma >= 0, got {gamma}")
+
+    if pwl_set.shape[0] != target_energy.shape[0] or pwl_set.shape[2] != target_energy.shape[1]:
+        raise ValueError(
+            "Shape mismatch between pwl_set and target_energy: "
+            f"{pwl_set.shape} vs {target_energy.shape}"
+        )
+
+    active = (target_energy > tau).to(pwl_set.dtype)
+    weights = active + gamma * (1.0 - active)
+    weights = weights / weights.sum(dim=-1, keepdim=True).clamp(min=eps)
+    return (pwl_set * weights.unsqueeze(1)).sum(dim=-1)
+
+
 PERM_REDUCE_REGISTRY = {
     "active_mean": perm_reduce_active_mean,
+    "active_soft_mean": perm_reduce_active_soft_mean,
 }
 
 
