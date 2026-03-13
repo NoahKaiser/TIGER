@@ -4,7 +4,7 @@
 audionet:
   audionet_name: TSE_TIGER2
   audionet_config:
-    out_channels: 128
+    out_channels: 160
     in_channels: 256
     num_blocks: 4
     upsampling_depth: 5

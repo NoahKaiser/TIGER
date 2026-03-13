@@ -34,6 +34,12 @@ class TSE_TIGER2(TSE_TIGER):
         total_outputs = self.num_speech_sources + (1 if self.predict_residual else 0)
         if total_outputs < 1:
             raise ValueError("total number of outputs must be >= 1")
+        if out_channels % total_outputs != 0:
+            raise ValueError(
+                "out_channels must be divisible by total outputs "
+                f"(got out_channels={out_channels}, total_outputs={total_outputs}; "
+                "total_outputs = num_sources + int(predict_residual))"
+            )
 
         super().__init__(
             out_channels=out_channels,

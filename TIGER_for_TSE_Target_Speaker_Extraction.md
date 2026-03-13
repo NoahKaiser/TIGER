@@ -681,3 +681,56 @@ The test runs one forward pass with `return_residual=True` and checks:
   - `max|y - (sum_k speech_hat_k + residual_hat)| < 1e-4`
 
 This validates the residual closure mechanism independently of full training.
+
+## Implemented Description: `look2hear/models/tiger_tse2.py` (`TSE_TIGER2`)
+
+`TSE_TIGER2` is a subclass of `TSE_TIGER` that keeps the same core TIGER-TSE backbone
+(STFT/subband split, recurrent separator, per-band complex mask prediction, iSTFT),
+but adds configurable residual-branch behavior and optional partition constraints on masks.
+
+### Constructor behavior
+- Inherits from `TSE_TIGER` and reuses the same network blocks.
+- Reinterprets `num_sources` as the number of **speech** outputs (`num_speech_sources`).
+- Adds:
+  - `predict_residual` (default `True`)
+  - `enforce_partition` (default `True`)
+- Effective model output count passed to parent:
+  - `total_outputs = num_speech_sources + 1` if `predict_residual=True`
+  - otherwise `total_outputs = num_speech_sources`
+
+### Forward behavior
+- Signature:
+  - `forward(input, spk_emb=None, return_residual=False, predict_residual=None, enforce_partition=None)`
+- `spk_emb` is accepted for compatibility but explicitly unused (`del spk_emb`).
+- Runtime overrides are supported:
+  - `predict_residual` and `enforce_partition` can be changed per call.
+- Input validation is stricter than in `TSE_TIGER`:
+  - accepts only 1D/2D/3D input, otherwise raises `ValueError`.
+
+### Key differences vs `TSE_TIGER`
+1. Residual representation:
+   - `TSE_TIGER`: always computes residual by closure
+     - `residual_hat = mixture_wav - speech_hat.sum(dim=1)`
+   - `TSE_TIGER2`:
+     - if `predict_residual=True`: residual is an explicit predicted output channel
+     - if `predict_residual=False`: falls back to closure residual (same idea as `TSE_TIGER`)
+
+2. Number of mask outputs:
+   - `TSE_TIGER`: predicts exactly `num_sources` outputs.
+   - `TSE_TIGER2`: can predict `num_sources + 1` outputs (speech + residual branch).
+
+3. Mask partition constraint:
+   - `TSE_TIGER`: the old force-sum-to-one mask block is removed.
+   - `TSE_TIGER2`: can enforce partition across outputs per time-frequency bin:
+     - real masks are shifted so their sum is `1`
+     - imaginary masks are shifted so their sum is `0`
+   - This is controlled by `enforce_partition`.
+
+4. Return contract:
+   - `TSE_TIGER`:
+     - returns `speech_hat` by default
+     - returns `(speech_hat, residual_hat)` when `return_residual=True`
+   - `TSE_TIGER2`:
+     - always returns only speech channels in the default path
+     - returns `(speech_hat, residual_hat)` when `return_residual=True`
+     - residual comes from explicit output branch or closure fallback depending on `predict_residual`
