@@ -65,6 +65,7 @@ class ECHIDataset(Dataset):
         pad_last: bool = False,       # set True for val/test if you want full coverage
         dtype: str = "float32",
         return_path: bool = True,     # third element: path (as in MP3DDataset) vs session key
+        mixture_mode: str = "manifest",  # "manifest" (default) or "target_sum"
     ) -> None:
         super().__init__()
         self.json_dir = Path(json_dir)
@@ -75,11 +76,17 @@ class ECHIDataset(Dataset):
         self.pad_last = pad_last
         self.dtype = dtype
         self.return_path = return_path
+        self.mixture_mode = str(mixture_mode)
 
         if self.seg_len <= 0 or self.hop_len <= 0:
             raise ValueError("segment and hop must be > 0.")
         if n_src < 1 or n_src > 4:
             raise ValueError("ECHI ref positions are pos1..pos4, so n_src must be in [1..4].")
+        if self.mixture_mode not in {"manifest", "target_sum"}:
+            raise ValueError(
+                f"Unsupported mixture_mode='{self.mixture_mode}'. "
+                "Expected one of {'manifest', 'target_sum'}."
+            )
 
         # --- load manifests
         self.mix = self._load_manifest(self.json_dir / "mix.json")  # list of [path, len]
@@ -102,6 +109,11 @@ class ECHIDataset(Dataset):
                             f"Manifest length mismatch at i={i}: mix={mix_len}, "
                             f"target_pos{k+1}={self.targets[k][i][1]}"
                         )
+        if self.mixture_mode == "target_sum" and not self.targets:
+            raise ValueError(
+                "mixture_mode='target_sum' requires target_pos*.json manifests, "
+                "but no targets were loaded."
+            )
 
         # --- prefix sums for global segment indexing
         self.seg_counts: List[int] = []
@@ -155,24 +167,46 @@ class ECHIDataset(Dataset):
         stop = start + self.seg_len
 
         if stop <= mix_len:
-            x, _ = sf.read(mix_path, start=start, stop=stop, dtype=self.dtype, always_2d=False)
             if self.targets:
                 ys = []
                 for k in range(self.n_src):
-                    y, _ = sf.read(self.targets[k][sess_i][0], start=start, stop=stop, dtype=self.dtype, always_2d=False)
+                    y, _ = sf.read(
+                        self.targets[k][sess_i][0],
+                        start=start,
+                        stop=stop,
+                        dtype=self.dtype,
+                        always_2d=False,
+                    )
                     ys.append(y)
+            if self.mixture_mode == "target_sum":
+                x = np.sum(np.stack(ys, axis=0), axis=0)
+            else:
+                x, _ = sf.read(
+                    mix_path, start=start, stop=stop, dtype=self.dtype, always_2d=False
+                )
         else:
             if not self.pad_last:
                 raise RuntimeError("Tail segment produced but pad_last=False (indexing bug).")
-            x, _ = sf.read(mix_path, start=start, stop=mix_len, dtype=self.dtype, always_2d=False)
             pad = stop - mix_len
-            x = np.pad(np.asarray(x), (0, pad), mode="constant")
-            ys = []
             if self.targets:
+                ys = []
                 for k in range(self.n_src):
-                    y, _ = sf.read(self.targets[k][sess_i][0], start=start, stop=mix_len, dtype=self.dtype, always_2d=False)
+                    y, _ = sf.read(
+                        self.targets[k][sess_i][0],
+                        start=start,
+                        stop=mix_len,
+                        dtype=self.dtype,
+                        always_2d=False,
+                    )
                     y = np.pad(np.asarray(y), (0, pad), mode="constant")
                     ys.append(y)
+            if self.mixture_mode == "target_sum":
+                x = np.sum(np.stack(ys, axis=0), axis=0)
+            else:
+                x, _ = sf.read(
+                    mix_path, start=start, stop=mix_len, dtype=self.dtype, always_2d=False
+                )
+                x = np.pad(np.asarray(x), (0, pad), mode="constant")
 
         mixture = torch.from_numpy(np.asarray(x)).float()  # [T]
         if self.targets:
@@ -198,6 +232,7 @@ class ECHIDataModule(object):
         num_workers: int = 4,
         pin_memory: bool = True,
         persistent_workers: bool = True,
+        mixture_mode: str = "manifest",
     ) -> None:
         self.train_dir = train_dir
         self.valid_dir = valid_dir
@@ -210,6 +245,7 @@ class ECHIDataModule(object):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
+        self.mixture_mode = mixture_mode
 
         self.data_train = None
         self.data_val = None
@@ -223,6 +259,7 @@ class ECHIDataModule(object):
             segment=self.segment,
             hop=self.hop,
             pad_last=False,      # train: drop tail
+            mixture_mode=self.mixture_mode,
         )
         # IMPORTANT: do NOT set segment=None for 36-min files
         self.data_val = ECHIDataset(
@@ -232,6 +269,7 @@ class ECHIDataModule(object):
             segment=self.segment,
             hop=self.hop,
             pad_last=False,       # val/test: full coverage if desired
+            mixture_mode=self.mixture_mode,
         )
         self.data_test = ECHIDataset(
             json_dir=self.test_dir,
@@ -240,6 +278,7 @@ class ECHIDataModule(object):
             segment=self.segment,
             hop=self.hop,
             pad_last=False,
+            mixture_mode=self.mixture_mode,
         )
 
     @property

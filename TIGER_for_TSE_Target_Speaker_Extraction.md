@@ -612,125 +612,156 @@ In `TSE_TIGER_FiLMCross`:
 
 ## Implemented Description: Residual-Aware PIT for ECHI (`TSE_TIGER` + `AudioLightningModuleECHI`)
 
-This repository now includes a residual-aware training path to make `TSE_TIGER` usable with ECHI sessions where:
-- multiple target positions are often silent in a segment
-- background/noise/interferers are strong
+### 1) High-level difference to `TIGER` (no formulas)
 
-The design keeps PIT for speech stems, adds an explicit residual closure term, and avoids collapse to all-zero speech masks.
+Compared to `look2hear/models/tiger.py`, `TSE_TIGER` (`look2hear/models/tiger_tse.py`) keeps the same main separator backbone, but changes the training use case:
+- It is used with ECHI-style sparse activity (many segments where some target slots are silent).
+- It removes TIGER’s hard per-bin mask partition step (the "force mask sum to 1" block).
+- It adds a residual output path by closure (optional return), and `AudioLightningModuleECHI` adds explicit residual supervision on top of speech PIT.
 
-### 1) Model forward: speech + residual closure
-File: `look2hear/models/tiger_tse.py`
+So the key design shift is: less hard constraint inside the mask head, more supervision-driven consistency at waveform level.
 
-- `TSE_TIGER.forward(...)` now supports `return_residual`:
-  - `False` (default): backward-compatible return `speech_hat`
-  - `True`: returns `(speech_hat, residual_hat)`
-- Shapes:
-  - `speech_hat`: `(B*nch, K, T)`
-  - `residual_hat`: `(B*nch, T)`
-- Residual is computed by closure after iSTFT:
-  - `residual_hat = mixture_wav - speech_hat.sum(dim=1)`
+### 2) Output mixture constraint (mathematical: what is missing in `TSE_TIGER`)
 
-This enforces numerical mixture consistency by construction:
-`mixture_wav == speech_hat.sum(dim=1) + residual_hat` (up to floating-point tolerance).
+In baseline `TIGER`, the complex masks are shifted per TF bin so that:
 
-### 2) Activity-aware PIT permutation reduction
-File: `look2hear/losses/pit_wrapper.py`
+```math
+\sum_{k=1}^{K} M^R_{k,f,t}=1,\qquad \sum_{k=1}^{K} M^I_{k,f,t}=0
+```
 
-- Added `perm_reduce_active_mean(pwl_set, target_energy, tau=1e-6, eps=1e-8)`.
-- Purpose:
-  - when several targets are silent, permutation cost focuses on active targets only.
-- Expected tensors:
-  - `pwl_set`: `(B, P, K)` (permutation losses from PIT)
-  - `target_energy`: `(B, K)` with `target_energy = (targets**2).mean(time)`
-- Registration:
-  - `perm_reduce: active_mean` is resolved inside `PITLossWrapper` via a registry.
+which implies:
 
-### 3) Training loss integration
-File: `look2hear/system/audio_litmodule_echi.py`
+```math
+\sum_{k=1}^{K}\hat{S}_{k,f,t}=X_{f,t}
+```
 
-In `training_step`:
-1. Forward pass tries `audio_model(mixtures, return_residual=True)`; falls back safely if model does not support it.
-2. Speech PIT loss:
-   - uses `reduce_kwargs={"target_energy": (targets**2).mean(dim=2), "tau": pit_activity_tau}`
-3. Residual supervision:
-   - `residual_target = mixtures - targets.sum(dim=1)`
-   - normalized residual loss:
-     - `L_res = mean( mse(residual_hat, residual_target) / (mean(mixtures**2)+eps) )`
-4. Total loss:
-   - `L_total = L_sp + lambda_res * L_res`
+In `TSE_TIGER`, this mask partition block is removed, so the model no longer enforces that TF-bin sum constraint directly.
 
-Logged metrics:
-- `train_loss`
-- `train_speech_loss`
-- `train_residual_loss`
+Instead, residual closure is defined in waveform domain:
 
-### 4) Config knobs used for ECHI run
-File: `configs/tiger_on_ECHI.yml`
+```math
+\hat{r}(t)=x(t)-\sum_{k=1}^{K_s}\hat{s}_k(t)
+```
 
-- `loss.train.config.perm_reduce: active_mean`
-- `loss.train.config.threshold_byloss: false` (important for MSE PIT)
-- `training.lambda_res: 0.5`
-- `training.pit_activity_tau: 1e-6`
+and therefore:
 
-### 5) Minimal closure sanity test
-File: `test/test_tiger_tse_residual_closure.py`
+```math
+x(t)=\sum_{k=1}^{K_s}\hat{s}_k(t)+\hat{r}(t)
+```
 
-The test runs one forward pass with `return_residual=True` and checks:
-- output shapes `(1, 4, T)` and `(1, T)`
-- closure identity max error:
-  - `max|y - (sum_k speech_hat_k + residual_hat)| < 1e-4`
+This guarantees closure only after defining `\hat{r}` this way; it is not a hard TF-mask partition constraint like in `TIGER`.
 
-This validates the residual closure mechanism independently of full training.
+### 3) Loss functions and PIT training from `configs/tiger_on_ECHI.yml`
+
+Training uses `AudioLightningModuleECHI` with two terms:
+
+1. Speech PIT loss (`loss.train`):
+   - `PITLossWrapper`
+   - base pairwise loss: `pairwise_neg_sisdr`
+   - `pit_from: pw_mtx`
+   - `perm_reduce: active_mean`
+   - `threshold_byloss: false`
+
+2. Residual loss:
+   - residual target:
+     ```math
+     r^*(t)=x(t)-\sum_{k=1}^{K_s}s_k^*(t)
+     ```
+   - normalized MSE:
+     ```math
+     L_{\text{res}}=
+     \frac{1}{B'}\sum_{b=1}^{B'}
+     \frac{\frac{1}{T}\lVert \hat{r}^{(b)}-r^{*(b)}\rVert_2^2}
+     {\frac{1}{T}\lVert x^{(b)}\rVert_2^2+\varepsilon}
+     ```
+
+Total training objective:
+
+```math
+L_{\text{total}}=L_{\text{speech}}+\lambda_{\text{res}}L_{\text{res}},\qquad
+\lambda_{\text{res}}=0.5
+```
+
+For PIT permutation scoring with `active_mean`, target energies
+`E_j=\frac{1}{T}\sum_t (s_j^*(t))^2` define active flags `a_j=\mathbf{1}[E_j>\tau]` (`\tau=10^{-6}`), and weights:
+
+```math
+w_j=\frac{a_j}{\sum_m a_m+\varepsilon},\qquad
+C_\pi=\sum_{j=1}^{K_s} w_j\,\ell_{\pi,j}
+```
+
+Validation (`loss.val`) uses `PITLossWrapper` with `pairwise_neg_se_sisdr`.
 
 ## Implemented Description: `look2hear/models/tiger_tse2.py` (`TSE_TIGER2`)
 
-`TSE_TIGER2` is a subclass of `TSE_TIGER` that keeps the same core TIGER-TSE backbone
-(STFT/subband split, recurrent separator, per-band complex mask prediction, iSTFT),
-but adds configurable residual-branch behavior and optional partition constraints on masks.
+### 1) High-level difference to `TIGER` (no formulas)
 
-### Constructor behavior
-- Inherits from `TSE_TIGER` and reuses the same network blocks.
-- Reinterprets `num_sources` as the number of **speech** outputs (`num_speech_sources`).
-- Adds:
-  - `predict_residual` (default `True`)
-  - `enforce_partition` (default `True`)
-- Effective model output count passed to parent:
-  - `total_outputs = num_speech_sources + 1` if `predict_residual=True`
-  - otherwise `total_outputs = num_speech_sources`
+`TSE_TIGER2` keeps the same TSE-TIGER backbone but changes output design relative to `TIGER`:
+- It can predict `K_s` speech outputs plus one explicit residual output (`predict_residual: true` in `tiger_on_ECHI2.yml`).
+- It can enforce partition constraints again (`enforce_partition: true`), unlike `TSE_TIGER` where this is removed.
+- It is trained with a silence-aware pairwise loss and soft activity-aware PIT reduction, tailored to sparse ECHI activity.
 
-### Forward behavior
-- Signature:
-  - `forward(input, spk_emb=None, return_residual=False, predict_residual=None, enforce_partition=None)`
-- `spk_emb` is accepted for compatibility but explicitly unused (`del spk_emb`).
-- Runtime overrides are supported:
-  - `predict_residual` and `enforce_partition` can be changed per call.
-- Input validation is stricter than in `TSE_TIGER`:
-  - accepts only 1D/2D/3D input, otherwise raises `ValueError`.
+So the key shift vs `TIGER` is not only the residual branch, but also a different sparse-activity PIT strategy in training.
 
-### Key differences vs `TSE_TIGER`
-1. Residual representation:
-   - `TSE_TIGER`: always computes residual by closure
-     - `residual_hat = mixture_wav - speech_hat.sum(dim=1)`
-   - `TSE_TIGER2`:
-     - if `predict_residual=True`: residual is an explicit predicted output channel
-     - if `predict_residual=False`: falls back to closure residual (same idea as `TSE_TIGER`)
+### 2) Output mixture constraint (mathematical: what is different in `TSE_TIGER2`)
 
-2. Number of mask outputs:
-   - `TSE_TIGER`: predicts exactly `num_sources` outputs.
-   - `TSE_TIGER2`: can predict `num_sources + 1` outputs (speech + residual branch).
+Let `K_s` be number of speech outputs and `K=K_s+1` when residual is explicitly predicted.
 
-3. Mask partition constraint:
-   - `TSE_TIGER`: the old force-sum-to-one mask block is removed.
-   - `TSE_TIGER2`: can enforce partition across outputs per time-frequency bin:
-     - real masks are shifted so their sum is `1`
-     - imaginary masks are shifted so their sum is `0`
-   - This is controlled by `enforce_partition`.
+Output definition:
 
-4. Return contract:
-   - `TSE_TIGER`:
-     - returns `speech_hat` by default
-     - returns `(speech_hat, residual_hat)` when `return_residual=True`
-   - `TSE_TIGER2`:
-     - always returns only speech channels in the default path
-     - returns `(speech_hat, residual_hat)` when `return_residual=True`
-     - residual comes from explicit output branch or closure fallback depending on `predict_residual`
+```math
+\text{if }predict\_residual=True:\quad
+\hat{s}_k=\hat{y}_k\ (k=1,\dots,K_s),\quad \hat{r}=\hat{y}_{K_s+1}
+```
+
+```math
+\text{if }predict\_residual=False:\quad
+\hat{s}_k=\hat{y}_k,\quad
+\hat{r}=x-\sum_{k=1}^{K_s}\hat{s}_k
+```
+
+With `enforce_partition=True`, masks are shifted per TF bin so:
+
+```math
+\sum_{k=1}^{K} M^R_{k,f,t}=1,\qquad
+\sum_{k=1}^{K} M^I_{k,f,t}=0
+```
+
+hence:
+
+```math
+\sum_{k=1}^{K}\hat{S}_{k,f,t}=X_{f,t}
+```
+
+This is the main difference to `TSE_TIGER`: here, partition can be enforced across all outputs (speech + residual when enabled).
+
+### 3) Loss functions and PIT training from `configs/tiger_on_ECHI2.yml`
+
+Training again uses `AudioLightningModuleECHI` with:
+
+1. Speech PIT loss (`loss.train`):
+   - `PITLossWrapper`
+   - base pairwise loss: `pairwise_neg_sisdr_silence_aware`
+   - `pit_from: pw_mtx`
+   - `perm_reduce: active_soft_mean`
+   - `threshold_byloss: false`
+
+2. Residual loss: same normalized residual MSE as above, weighted by `lambda_res=0.5`.
+
+For the silence-aware pairwise loss, each estimate-target pair is mixed between active SI-SDR loss and silence penalty:
+
+```math
+\ell_{i,j}=a_j\,\ell^{\text{SI-SDR}}_{i,j}+(1-a_j)\,\alpha\,\ell^{\text{sil}}_{i,j}
+```
+
+where `a_j=\sigma\!\left(\beta(\log E_j-\log\tau)\right)`, with config values
+`\tau=10^{-6}`, `\beta=8.0`, `\alpha=\text{silence_weight}=0.1`.
+
+For `active_soft_mean` permutation reduction, hard activity flags `h_j=\mathbf{1}[E_j>\tau]` are softened by `\gamma=0.05`:
+
+```math
+w_j=\frac{h_j+\gamma(1-h_j)}{\sum_m \left(h_m+\gamma(1-h_m)\right)+\varepsilon},\qquad
+C_\pi=\sum_{j=1}^{K_s} w_j\,\ell_{\pi,j}
+```
+
+Validation uses `PITLossWrapper` with `pairwise_neg_se_sisdr`; model selection in this config monitors `val_total_loss`.
