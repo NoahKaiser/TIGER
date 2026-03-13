@@ -53,6 +53,9 @@ class ECHIDataset(Dataset):
     - builds a global segment index (prefix sums)
     - __getitem__ returns (mixture[T], targets[n_src,T], utt_id) as expected by look2hear.system
       :contentReference[oaicite:6]{index=6}
+    - mixture_mode:
+      "manifest" reads the mixture waveform from mix.json,
+      "target_sum" reconstructs the mixture by summing target_pos*.json tracks
     """
 
     def __init__(
@@ -65,7 +68,7 @@ class ECHIDataset(Dataset):
         pad_last: bool = False,       # set True for val/test if you want full coverage
         dtype: str = "float32",
         return_path: bool = True,     # third element: path (as in MP3DDataset) vs session key
-        mixture_mode: str = "manifest",  # "manifest" (default) or "target_sum"
+        mixture_mode: str = "manifest",  # "manifest": read mix.json, "target_sum": sum target_pos*.json
     ) -> None:
         super().__init__()
         self.json_dir = Path(json_dir)

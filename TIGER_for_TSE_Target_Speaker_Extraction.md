@@ -340,7 +340,7 @@ A small MLP predicts per-feature scale (`gamma`) and shift (`beta`) values, and 
 `subband_feature = gamma * subband_feature + beta`
 
 This helps the model emphasize features that match the target speaker and suppress non-target speech/noise.  
-The FiLM layer is initialized close to identity (`gamma ≈ 1`, `beta ≈ 0`) for more stable training.
+The FiLM layer is initialized close to identity ($\gamma \approx 1$, $\beta \approx 0$) for more stable training.
 
 ### TIGER_TSE_FiLM2
 `TIGER_TSE_FiLM2` moves FiLM conditioning from an early one-shot feature modulation to an **iterative update modulation** inside the separator (`Recurrent.forward`).
@@ -372,7 +372,7 @@ Implementation note: in the current call site, the separator is invoked with `be
 `SpeakerPromptTokenizer` converts a fixed-length speaker embedding into a small set of **speaker prompt tokens** that act as a learnable *memory* for cross-attention conditioning.
 
 ### Purpose
-Instead of conditioning the separator with a single vector (e.g., concatenation or FiLM), we represent the target speaker as a **token sequence** `spk_tokens ∈ ℝ^{B×M×d}`. These tokens can be used as **Keys/Values** in cross-attention, allowing the separator to selectively read speaker information at each time–frequency location.
+Instead of conditioning the separator with a single vector (e.g., concatenation or FiLM), we represent the target speaker as a **token sequence** $spk\_tokens \in \mathbb{R}^{B\times M\times d}$. These tokens can be used as **Keys/Values** in cross-attention, allowing the separator to selectively read speaker information at each time-frequency location.
 
 This is conceptually related to prompt/prefix conditioning in attention models and to affine modulation of learned prompts (in `prompt_mod` mode).  
 References: Vaswani et al. (Transformer attention) , Li & Liang (Prefix-Tuning) , Perez et al. (FiLM) 
@@ -390,16 +390,16 @@ Where:
 ### Modes
 #### 1) `mode="linear"`
 A single linear projection maps the embedding into `M·d` scalars and reshapes:
-\[
+$$
 \text{tok} = \mathrm{reshape}(W\,\text{spk\_emb}+b) \in \mathbb{R}^{B\times M\times d}.
-\]
+$$
 
 #### 2) `mode="prompt_mod"`
-Learned base prompts are **affinely modulated** by per-sample `(γ, β)` predicted from the embedding:
-\[
+Learned base prompts are **affinely modulated** by per-sample $(\gamma, \beta)$ predicted from the embedding:
+$$
 \text{tok} = P\odot(1+\gamma) + \beta,
-\]
-where \(P\in\mathbb{R}^{M\times d}\) is a learned prompt table and \(\gamma,\beta\in\mathbb{R}^{B\times M\times d}\).
+$$
+where $P\in\mathbb{R}^{M\times d}$ is a learned prompt table and $\gamma,\beta\in\mathbb{R}^{B\times M\times d}$.
 
 ### Notes
 - LayerNorm is applied on the token dimension (`d`) and optional dropout is supported.
@@ -413,7 +413,7 @@ where \(P\in\mathbb{R}^{M\times d}\) is a learned prompt table and \(\gamma,\bet
 `MultiHeadCrossAttention2D` implements **multi-head cross-attention** that conditions a 2D time–frequency representation on speaker prompt tokens.
 
 ### Purpose
-Given mixture features `x ∈ ℝ^{B×C×T×F}` and speaker tokens `S ∈ ℝ^{B×M×D_s}`, the module computes:
+Given mixture features $x \in \mathbb{R}^{B\times C\times T\times F}$ and speaker tokens $S \in \mathbb{R}^{B\times M\times D_s}$, the module computes:
 - **Queries** from mixture features (`x`)
 - **Keys/Values** from speaker tokens (`S`)
 
@@ -436,29 +436,29 @@ Where:
 
 ### Mechanism (per head)
 Scaled dot-product cross-attention:
-\[
+$$
 \mathrm{Attn}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
-\]
+$$
 with:
-- \(Q = W_q\,x\)
-- \(K = W_k\,S\)
-- \(V = W_v\,S\)
+- $Q = W_q\,x$
+- $K = W_k\,S$
+- $V = W_v\,S$
 
 ### 2D handling and factorization
 The module **factorizes attention over the last axis** (frequency or time depending on `dim`):
 
 1. Optionally swap the last two axes if `dim==4` so that attention always runs over the internal `T` axis.
 2. Reshape into sequences per slice:
-   \[
+   $$
    x \rightarrow x_{\text{seq}} \in \mathbb{R}^{(B\cdot F)\times T\times C}
-   \]
+   $$
 3. Compute attention from each slice to the same speaker memory `S` (broadcasted across `F`).
 4. Reshape back to `(B, C, T, F)` and add a residual connection.
 
 ### Complexity
 Let `L` be the attended axis length (typically `T`) and `M` the number of speaker tokens.
-- Self-attention scales as \(O(L^2)\)
-- Cross-attention here scales as \(O(L\cdot M)\)
+- Self-attention scales as $O(L^2)$
+- Cross-attention here scales as $O(L\cdot M)$
 
 With small `M` (e.g., 8), cross-attention is significantly cheaper in the attention matrix than full self-attention. 
 
@@ -625,31 +625,31 @@ So the key design shift is: less hard constraint inside the mask head, more supe
 
 In baseline `TIGER`, the complex masks are shifted per TF bin so that:
 
-```math
+$$
 \sum_{k=1}^{K} M^R_{k,f,t}=1,\qquad \sum_{k=1}^{K} M^I_{k,f,t}=0
-```
+$$
 
 which implies:
 
-```math
+$$
 \sum_{k=1}^{K}\hat{S}_{k,f,t}=X_{f,t}
-```
+$$
 
 In `TSE_TIGER`, this mask partition block is removed, so the model no longer enforces that TF-bin sum constraint directly.
 
 Instead, residual closure is defined in waveform domain:
 
-```math
+$$
 \hat{r}(t)=x(t)-\sum_{k=1}^{K_s}\hat{s}_k(t)
-```
+$$
 
 and therefore:
 
-```math
+$$
 x(t)=\sum_{k=1}^{K_s}\hat{s}_k(t)+\hat{r}(t)
-```
+$$
 
-This guarantees closure only after defining `\hat{r}` this way; it is not a hard TF-mask partition constraint like in `TIGER`.
+This guarantees closure only after defining $\hat{r}$ this way; it is not a hard TF-mask partition constraint like in `TIGER`.
 
 ### 3) Loss functions and PIT training from `configs/tiger_on_ECHI.yml`
 
@@ -664,31 +664,31 @@ Training uses `AudioLightningModuleECHI` with two terms:
 
 2. Residual loss:
    - residual target:
-     ```math
+     $$
      r^*(t)=x(t)-\sum_{k=1}^{K_s}s_k^*(t)
-     ```
+     $$
    - normalized MSE:
-     ```math
+     $$
      L_{\text{res}}=
      \frac{1}{B'}\sum_{b=1}^{B'}
      \frac{\frac{1}{T}\lVert \hat{r}^{(b)}-r^{*(b)}\rVert_2^2}
      {\frac{1}{T}\lVert x^{(b)}\rVert_2^2+\varepsilon}
-     ```
+     $$
 
 Total training objective:
 
-```math
+$$
 L_{\text{total}}=L_{\text{speech}}+\lambda_{\text{res}}L_{\text{res}},\qquad
 \lambda_{\text{res}}=0.5
-```
+$$
 
 For PIT permutation scoring with `active_mean`, target energies
-`E_j=\frac{1}{T}\sum_t (s_j^*(t))^2` define active flags `a_j=\mathbf{1}[E_j>\tau]` (`\tau=10^{-6}`), and weights:
+$E_j=\frac{1}{T}\sum_t (s_j^*(t))^2$ define active flags $a_j=\mathbf{1}[E_j>\tau]$ ($\tau=10^{-6}$), and weights:
 
-```math
+$$
 w_j=\frac{a_j}{\sum_m a_m+\varepsilon},\qquad
 C_\pi=\sum_{j=1}^{K_s} w_j\,\ell_{\pi,j}
-```
+$$
 
 Validation (`loss.val`) uses `PITLossWrapper` with `pairwise_neg_se_sisdr`.
 
@@ -709,29 +709,29 @@ Let `K_s` be number of speech outputs and `K=K_s+1` when residual is explicitly 
 
 Output definition:
 
-```math
+$$
 \text{if }predict\_residual=True:\quad
 \hat{s}_k=\hat{y}_k\ (k=1,\dots,K_s),\quad \hat{r}=\hat{y}_{K_s+1}
-```
+$$
 
-```math
+$$
 \text{if }predict\_residual=False:\quad
 \hat{s}_k=\hat{y}_k,\quad
 \hat{r}=x-\sum_{k=1}^{K_s}\hat{s}_k
-```
+$$
 
 With `enforce_partition=True`, masks are shifted per TF bin so:
 
-```math
+$$
 \sum_{k=1}^{K} M^R_{k,f,t}=1,\qquad
 \sum_{k=1}^{K} M^I_{k,f,t}=0
-```
+$$
 
 hence:
 
-```math
+$$
 \sum_{k=1}^{K}\hat{S}_{k,f,t}=X_{f,t}
-```
+$$
 
 This is the main difference to `TSE_TIGER`: here, partition can be enforced across all outputs (speech + residual when enabled).
 
@@ -750,18 +750,18 @@ Training again uses `AudioLightningModuleECHI` with:
 
 For the silence-aware pairwise loss, each estimate-target pair is mixed between active SI-SDR loss and silence penalty:
 
-```math
+$$
 \ell_{i,j}=a_j\,\ell^{\text{SI-SDR}}_{i,j}+(1-a_j)\,\alpha\,\ell^{\text{sil}}_{i,j}
-```
+$$
 
-where `a_j=\sigma\!\left(\beta(\log E_j-\log\tau)\right)`, with config values
-`\tau=10^{-6}`, `\beta=8.0`, `\alpha=\text{silence_weight}=0.1`.
+where $a_j=\sigma\!\left(\beta(\log E_j-\log\tau)\right)$, with config values
+$\tau=10^{-6}$, $\beta=8.0$, $\alpha=\text{silence_weight}=0.1$.
 
-For `active_soft_mean` permutation reduction, hard activity flags `h_j=\mathbf{1}[E_j>\tau]` are softened by `\gamma=0.05`:
+For `active_soft_mean` permutation reduction, hard activity flags $h_j=\mathbf{1}[E_j>\tau]$ are softened by $\gamma=0.05$:
 
-```math
+$$
 w_j=\frac{h_j+\gamma(1-h_j)}{\sum_m \left(h_m+\gamma(1-h_m)\right)+\varepsilon},\qquad
 C_\pi=\sum_{j=1}^{K_s} w_j\,\ell_{\pi,j}
-```
+$$
 
 Validation uses `PITLossWrapper` with `pairwise_neg_se_sisdr`; model selection in this config monitors `val_total_loss`.
