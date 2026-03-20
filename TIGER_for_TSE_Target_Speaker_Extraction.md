@@ -196,8 +196,8 @@ Reference: https://www.chimechallenge.org/current/task2/data
 
 ### Output format expected by TSE code
 - The `.pt` file contains:
-  - `{ "P001": tensor([D]), "P002": tensor([D]), ... }`
-- This matches `build_spk_table_from_pt(...)`, which stacks vectors into `[N, D]` and builds `spk2idx`.
+  - `{ "P001": tensor(...), "P002": tensor(...), ... }`, where each embedding vector has shape $[D]$
+- This matches `build_spk_table_from_pt(...)`, which stacks vectors into $[N, D]$ and builds `spk2idx`.
 
 ### CLI summary
 - Required:
@@ -301,7 +301,7 @@ This section describes how speaker embeddings are made available to the model wh
 - `build_spk_table_from_pt(...)` validates this dict, sorts speaker IDs (when `sort_ids=True`), and returns:
   - `spk2idx`: `speaker_id -> integer index`
   - `spk_ids`: ordered list of speaker IDs
-  - `spk_table`: stacked tensor `[N_speakers, emb_dim]`
+  - `spk_table`: stacked tensor $[N_{\text{speakers}}, \text{emb\_dim}]$
 
 ### 2) What the DataModule uses
 - `TSE_ECHIDataModule.setup()` loads the embedding file to get `spk2idx`.
@@ -310,15 +310,15 @@ This section describes how speaker embeddings are made available to the model wh
   - `[target_path, spk_id, num_samples]`
 - For each row, `spk_id` is converted to `spk_idx` using `spk2idx`.
 - `__getitem__` returns:
-  - `(mixture[T], target[T], spk_idx (LongTensor scalar), utt_id)`
+  - $(\text{mixture}[T], \text{target}[T], \text{spk\_idx}\ (\text{LongTensor scalar}), \text{utt\_id})$
 - After collation, batch shape is effectively:
-  - `mixtures[B,T], target[B,T], spk_idx[B], utt_id[list]`
+  - $\text{mixtures}[B,T], \text{target}[B,T], \text{spk\_idx}[B], \text{utt\_id}[\text{list}]$
 
 ### 3) What the Lightning system uses
 - `AudioLightningModuleTSE_ECHI` loads the same `spk_emb_path` (explicit arg or config fallback).
 - It rebuilds `spk_table` via `build_spk_table_from_pt(..., sort_ids=True)` and stores it as a registered buffer.
 - In `forward(wav, spk_idx)`:
-  - `spk_emb = F.embedding(spk_idx, self.spk_table)` gives `[B, emb_dim]`
+  - `spk_emb = F.embedding(spk_idx, self.spk_table)` gives $[B, \text{emb\_dim}]$
   - then calls `self.audio_model(wav, spk_emb=spk_emb)`
 
 ### 4) Why the index mapping stays consistent
@@ -346,13 +346,13 @@ The FiLM layer is initialized close to identity ($\gamma \approx 1$, $\beta \app
 `TIGER_TSE_FiLM2` moves FiLM conditioning from an early one-shot feature modulation to an **iterative update modulation** inside the separator (`Recurrent.forward`).
 
 In `TSE_TIGER_FiLM2.forward`, the speaker embedding is mapped once to FiLM parameters:
-- `film_params = film_mlp(spk_emb) -> [B*nch, 2N]`
-- split into `gamma, beta -> [B*nch, N]`
+- `film_params = film_mlp(spk_emb)` -> $[B*nch, 2N]$
+- split into `gamma, beta` -> $[B*nch, N]$
 - scaled as `gamma = 1 + film_scale * gamma`, `beta = film_scale * beta`
-- reshaped for separator broadcasting: `gamma_it, beta_it -> [B*nch, N, 1, 1]`
+- reshaped for separator broadcasting: `gamma_it, beta_it` -> $[B*nch, N, 1, 1]$
 
 Then `Recurrent.forward(x, gamma, beta)` applies FiLM to the **iteration update** (not directly to the input state):
-- input separator state is rearranged to `[B, N, nband, T]`
+- input separator state is rearranged to $[B, N, nband, T]$
 - each iteration computes:
   - `u_i` (current iteration input; first `x`, then `concat_block(mixture + x)`)
   - `y_i = freq_time_process(u_i)`
@@ -378,8 +378,8 @@ This is conceptually related to prompt/prefix conditioning in attention models a
 References: Vaswani et al. (Transformer attention) , Li & Liang (Prefix-Tuning) , Perez et al. (FiLM) 
 
 ### I/O
-- **Input:** `spk_emb` with shape `(B, D)` (or `(B, 1, D)`; the singleton dim is removed)
-- **Output:** `spk_tokens` with shape `(B, M, d)`
+- **Input:** `spk_emb` with shape $(B, D)$ (or $(B, 1, D)$; the singleton dim is removed)
+- **Output:** `spk_tokens` with shape $(B, M, d)$
 
 Where:
 - `B` = batch size  
@@ -422,8 +422,8 @@ Reference: Vaswani et al. (scaled dot-product attention)
 
 ### I/O
 - **Input:**
-  - `x`: mixture features `(B, C, T, F)`
-  - `spk_tokens`: speaker memory `(B, M, D_s)`
+  - `x`: mixture features $(B, C, T, F)$
+  - `spk_tokens`: speaker memory $(B, M, D_s)$
 - **Output:** speaker-conditioned features with the same shape as `x`
 
 Where:
@@ -453,7 +453,7 @@ The module **factorizes attention over the last axis** (frequency or time depend
    x \rightarrow x_{\text{seq}} \in \mathbb{R}^{(B\cdot F)\times T\times C}
    $$
 3. Compute attention from each slice to the same speaker memory `S` (broadcasted across `F`).
-4. Reshape back to `(B, C, T, F)` and add a residual connection.
+4. Reshape back to $(B, C, T, F)$ and add a residual connection.
 
 ### Complexity
 Let `L` be the attended axis length (typically `T`) and `M` the number of speaker tokens.
@@ -473,7 +473,7 @@ This section shows the standard wiring used in **TSE_TIGER_SelfCross**:
 1) convert a fixed speaker embedding to **prompt tokens** with `SpeakerPromptTokenizer`  
 2) use these tokens as **Keys/Values** in `MultiHeadCrossAttention2D` to condition mixture features  
 3) apply **serial Self-Attention + Cross-Attention** as done inside the `Recurrent` separator  
-4) replicate tokens correctly for **multi-channel** internal batching (`B*nch`).
+4) replicate tokens correctly for **multi-channel** internal batching ($B*nch$).
 
 #### 1) Speaker embedding → speaker prompt tokens
 
@@ -556,11 +556,11 @@ Given mixture waveform `input` and speaker embedding `spk_emb`:
 
 ### FiLM parameterization in FiLMCross
 Unlike global channel-only FiLM, FiLMCross predicts FiLM parameters for each `(band, feature_channel)`:
-- `film_mlp(spk_emb) -> [B*nch, 2 * nband * N]`
-- reshape to `[B*nch, 2, nband, N]`
+- `film_mlp(spk_emb)` -> $[B*nch, 2 * nband * N]$
+- reshape to $[B*nch, 2, nband, N]$
 - split:
-  - `gamma_raw = film_params[:, 0]` -> `[B*nch, nband, N]`
-  - `beta_raw  = film_params[:, 1]` -> `[B*nch, nband, N]`
+  - `gamma_raw = film_params[:, 0]` -> $[B*nch, nband, N]$
+  - `beta_raw = film_params[:, 1]` -> $[B*nch, nband, N]$
 - scale:
   - `gamma = 1 + film_scale * gamma_raw`
   - `beta  = film_scale * beta_raw`
@@ -599,10 +599,10 @@ In `TSE_TIGER_FiLMCross`:
 ### Expected runtime interfaces
 - `forward(input, spk_emb=...)` requires speaker embeddings.
 - `spk_emb` accepted shapes:
-  - `[D]`
-  - `[B, D]`
-  - `[B*nch, D]`
-- for `[B, D]` with multi-channel internal batching, embeddings are repeated to match `B*nch`.
+  - $[D]$
+  - $[B, D]$
+  - $[B*nch, D]$
+- for $[B, D]$ with multi-channel internal batching, embeddings are repeated to match $B*nch$.
 
 ### Registration and config usage
 - Model class name: `TSE_TIGER_FiLMCross`
@@ -765,3 +765,121 @@ C_\pi=\sum_{j=1}^{K_s} w_j\,\ell_{\pi,j}
 $$
 
 Validation uses `PITLossWrapper` with `pairwise_neg_se_sisdr`; model selection in this config monitors `val_total_loss`.
+
+## Implemented Description: `look2hear/losses/matrix.py::PairwiseNegSISDRSilenceAware(_Loss)`
+
+This section documents the exact implementation of `PairwiseNegSISDRSilenceAware` in `look2hear/losses/matrix.py`, including what is done in code and how it is used by TSE-ECHI training.
+
+### 1) Purpose and motivation
+
+`PairwiseNegSISDRSilenceAware` is a pairwise loss for sparse-activity targets:
+- when a target speaker is active, it behaves like pairwise negative SI-SDR;
+- when a target speaker is silent/inactive, it penalizes residual estimate energy instead of relying on SI-SDR alone.
+
+This avoids weak/unstable supervision for silent target slots and provides a direct "be quiet" objective.
+
+### 2) Class/API surface
+
+- Class: `PairwiseNegSISDRSilenceAware(_Loss)`
+- Alias used by configs: `pairwise_neg_sisdr_silence_aware`
+  - defined as: `pairwise_neg_sisdr_silence_aware = PairwiseNegSISDRSilenceAware()`
+- Input contract in `forward(...)`:
+  - `ests`: $[B, K, T]$
+  - `targets`: $[B, K, T]$
+  - both must have identical shape; otherwise a `TypeError` is raised.
+- Output:
+  - pairwise loss matrix $[B, K, K]$ with estimate index `i` and target index `j`.
+
+### 3) Constructor parameters (defaults in code)
+
+- `zero_mean=True`: remove DC offset per waveform before loss computation.
+- `take_log=True`: active SI-SDR branch is in dB (`-10*log10(...)`).
+- `activity_tau=1e-6`: activity threshold reference.
+- `activity_beta=8.0`: sigmoid slope in activity gating.
+- `silence_weight=0.1`: scale of inactive-target silence penalty.
+- `EPS=1e-8`: numerical stability floor.
+
+### 4) Exact forward computation (code-faithful)
+
+Given `ests, targets ∈ R^{B×K×T}`:
+
+1. Optional zero-mean normalization (if `zero_mean=True`):
+$$
+\tilde{s}=s-\frac{1}{T}\sum_t s(t),\qquad
+\tilde{\hat{s}}=\hat{s}-\frac{1}{T}\sum_t \hat{s}(t)
+$$
+
+2. Broadcast to all estimate-target pairs:
+- `s_target = targets.unsqueeze(1)` -> shape $[B,1,K,T]$
+- `s_estimate = ests.unsqueeze(2)` -> shape $[B,K,1,T]$
+
+3. Active-target SI-SDR branch ($\ell^{\text{act}}_{i,j}$):
+$$
+\text{proj}_{i,j}=
+\frac{\langle \hat{s}_i, s_j \rangle}{\|s_j\|_2^2+\varepsilon}\,s_j,\qquad
+e_{i,j}=\hat{s}_i-\text{proj}_{i,j}
+$$
+$$
+r_{i,j}=\frac{\|\text{proj}_{i,j}\|_2^2}{\|e_{i,j}\|_2^2+\varepsilon}
+$$
+If `take_log=True`:
+$$
+\ell^{\text{act}}_{i,j}=-10\log_{10}(r_{i,j}+\varepsilon)
+$$
+Else:
+$$
+\ell^{\text{act}}_{i,j}=-r_{i,j}
+$$
+
+4. Silent-target branch ($\ell^{\text{sil}}_{i,j}$):
+$$
+\ell^{\text{sil}}_{i,j}=\frac{1}{T}\sum_t \hat{s}_i(t)^2
+$$
+In implementation, this is first $[B,K,1]$ and then expanded to $[B,K,K]$.
+
+5. Soft activity gate from target energy:
+$$
+E_j=\frac{1}{T}\sum_t s_j(t)^2,\qquad
+a_j=\sigma\!\left(\beta\left(\log E_j-\log\tau\right)\right)
+$$
+with safety:
+- `E_j` is clamped to `>= EPS` before log;
+- `tau` is floored by `EPS` (`tau=max(tau, EPS)`).
+
+6. Final pairwise loss blend:
+$$
+\ell_{i,j}=a_j\,\ell^{\text{act}}_{i,j} + (1-a_j)\,\alpha\,\ell^{\text{sil}}_{i,j}
+$$
+where $\alpha = \text{silence_weight}$.
+
+Return tensor is $L = [\ell_{i,j}] ∈ R^{B×K×K}$.
+
+### 5) Interpretation of the gating behavior
+
+- If target `j` is clearly active (`E_j >> tau`): `a_j -> 1`, so loss is mostly SI-SDR for all estimates against that target.
+- If target `j` is near-silent (`E_j << tau`): `a_j -> 0`, so loss emphasizes estimate-energy suppression via `silence_weight * silence_loss`.
+- `activity_beta` controls transition sharpness:
+  - higher beta: more hard-threshold-like;
+  - lower beta: smoother interpolation.
+
+### 6) Runtime overrides from training loop
+
+`forward(...)` allows per-call overrides:
+- `activity_tau=...`
+- `activity_beta=...`
+- `silence_weight=...`
+
+`AudioLightningModuleECHI` passes these from config:
+- `training.pit_activity_tau` -> `activity_tau`
+- `training.pit_activity_beta` -> `activity_beta`
+- `training.pit_silence_weight` -> `silence_weight`
+
+### 7) Relation to PIT reduction (`gamma`)
+
+`pit_activity_gamma` is **not** part of `PairwiseNegSISDRSilenceAware`.
+
+It belongs to permutation reduction (`perm_reduce: active_soft_mean`) in `look2hear/losses/pit_wrapper.py`, where it assigns a non-zero floor weight to inactive targets when averaging per-permutation losses.
+
+So in ECHI2 training:
+- this class defines each pairwise entry $\ell_{i,j}$ (local pair loss behavior),
+- PIT `active_soft_mean` with `gamma` defines how those entries are aggregated per permutation (global assignment behavior).
