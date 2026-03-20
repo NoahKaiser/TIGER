@@ -274,15 +274,27 @@ class ECHIDataModule(object):
             pad_last=False,       # val/test: full coverage if desired
             mixture_mode=self.mixture_mode,
         )
-        self.data_test = ECHIDataset(
-            json_dir=self.test_dir,
-            n_src=self.n_src,
-            sample_rate=self.sample_rate,
-            segment=self.segment,
-            hop=self.hop,
-            pad_last=False,
-            mixture_mode=self.mixture_mode,
-        )
+        # Fit-only workflows (e.g., AudioLightningModuleECHI) do not consume test data.
+        # If test split is not compatible with current mixture_mode, skip test dataset.
+        self.data_test = None
+        try:
+            self.data_test = ECHIDataset(
+                json_dir=self.test_dir,
+                n_src=self.n_src,
+                sample_rate=self.sample_rate,
+                segment=self.segment,
+                hop=self.hop,
+                pad_last=False,
+                mixture_mode=self.mixture_mode,
+            )
+        except ValueError as exc:
+            if "mixture_mode='target_sum' requires target_pos*.json manifests" in str(exc):
+                print_(
+                    "ECHIDataModule: skipping test dataset in setup because eval/test "
+                    "has no target manifests and test loader is optional for fit."
+                )
+            else:
+                raise
 
     @property
     def make_loader(self):
@@ -303,12 +315,14 @@ class ECHIDataModule(object):
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
         )
-        test_loader = DataLoader(
-            self.data_test,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-        )
+        test_loader = None
+        if self.data_test is not None:
+            test_loader = DataLoader(
+                self.data_test,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.persistent_workers,
+            )
         return train_loader, val_loader, test_loader
