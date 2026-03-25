@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=tiger_on_SubsetECHI
+#SBATCH --job-name=TIGER-TSE2-ECHI_without-Noise_with_standard_PIT
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -9,15 +9,15 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse19
+#SBATCH --nodelist=linse20
 
 
 
 #uv run --extra=cu118 DataPreProcess/process_echoset.py --in_dir /data/public/EchoSet --out_dir out
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tse_tiger_FiLMCross.yml
-uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_SubsetECHI.yml
-#uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_on_ECHI.yml
+#uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_SubsetECHI2.yml
+uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_tse2.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
                                                              # --output_root /no_backups/s1495 \
@@ -67,3 +67,12 @@ uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_Subset
  # --max_lr 1 \
  # --num_training 100 \
  # --plot
+
+ #uv run --extra=cu118 check_causality.py \
+  #--conf_dir configs/causal_tiger4.yml \
+  #--source_idx 0 \
+  #--method perturb \
+  #--algo_lat 0.005 \
+  #--device auto \
+  #--num_trials 100 \
+  #--seed 0

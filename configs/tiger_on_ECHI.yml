@@ -5,7 +5,7 @@ audionet:
   audionet_config:
     out_channels: 128
     in_channels: 256
-    num_blocks: 4
+    num_blocks: 8
     upsampling_depth: 5
     win: 640
     stride: 160
@@ -39,7 +39,7 @@ training:
     patience: 20
     verbose: true
   SpeedAug: False
-  lambda_res: 0.5
+  lambda_res: 0
   pit_activity_tau: 1.0e-6
   ckpt_path: Null # Null if training from scratch
   checkpoint:
@@ -53,15 +53,15 @@ training:
 # Optim config
 optimizer:
   optim_name: adam
-  lr: 0.001 #original lr=0.001, try smaller lr
+  lr: 0.0005 #original lr=0.001, try smaller lr
   weight_decay: 0
 
 # Sche config
 scheduler: 
-  sche_name: ReduceLROnPlateau
-  sche_config:
-    patience: 10
-    factor: 0.5
+  sche_name: Null #ReduceLROnPlateau
+  sche_config: {}
+    #patience: 10
+    #factor: 0.5
 
 # Data config
 datamodule:
@@ -74,10 +74,10 @@ datamodule:
     sample_rate: 16000
     segment: 3.0
     #normalize_audio: false
-    batch_size: 4
+    batch_size: 1
     num_workers: 8
     pin_memory: true
     persistent_workers: false
 
 exp:
-  exp_name: TIGER-ECHI-activity-aware_PIT_residual_closure
+  exp_name: TIGER-ECHI-activity-aware_PIT
