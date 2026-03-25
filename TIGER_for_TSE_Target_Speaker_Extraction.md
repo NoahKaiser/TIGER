@@ -766,6 +766,107 @@ $$
 
 Validation uses `PITLossWrapper` with `pairwise_neg_se_sisdr`; model selection in this config monitors `val_total_loss`.
 
+## Implemented Description: `look2hear/losses/pit_wrapper.py::PITLossWrapper`
+
+This section gives code-faithful mathematical notation for the PIT wrapper in `look2hear/losses/pit_wrapper.py`.
+
+Let:
+- batch size: $B$
+- number of sources (targets and estimates): $K$
+- permutation set: $S_K$ with $|S_K|=K!$
+- pairwise loss tensor from base loss: $L \in \mathbb{R}^{B\times K\times K}$, where
+  $L_{b,i,j}=\ell_{b,i,j}$ (estimate index $i$, target index $j$).
+
+In code, PIT operates on the transposed matrix
+$\tilde{L}_{b,j,i}=L_{b,i,j}$ (rows = targets, cols = estimates).
+
+For permutation $\pi\in S_K$, interpreted as mapping target $\to$ estimate, i.e. $\pi(j)\in\{1,\dots,K\}$:
+$$
+v_{b,\pi,j}=\tilde{L}_{b,j,\pi(j)}=L_{b,\pi(j),j}.
+$$
+
+### 1) Standard PIT (`perm_reduce=None`)
+
+Permutation cost:
+$$
+C_{b,\pi}=\frac{1}{K}\sum_{j=1}^{K} v_{b,\pi,j}.
+$$
+
+Best assignment:
+$$
+\pi_b^*=\arg\min_{\pi\in S_K} C_{b,\pi},\qquad
+m_b=C_{b,\pi_b^*}.
+$$
+
+Implementation branch:
+- if `K <= 3`: exact factorial enumeration;
+- if `K > 3`: Hungarian assignment on $\tilde{L}_b$, with the same linear-sum objective
+  $$
+  m_b=\frac{1}{K}\sum_{j=1}^{K}\tilde{L}_{b,j,\pi_b^*(j)}.
+  $$
+
+### 2) Activity-weighted PIT (`perm_reduce=active_mean`)
+
+Given target energies $E_{b,j}$ and threshold $\tau$:
+$$
+a_{b,j}=\mathbf{1}[E_{b,j}>\tau],\qquad
+w_{b,j}=\frac{a_{b,j}}{\max\!\left(\sum_{m=1}^{K} a_{b,m},\varepsilon\right)}.
+$$
+
+Permutation cost:
+$$
+C_{b,\pi}=\sum_{j=1}^{K} w_{b,j}\,v_{b,\pi,j}.
+$$
+
+Then $\pi_b^*$ and $m_b$ are chosen as above by minimizing $C_{b,\pi}$.
+
+### 3) Soft activity-weighted PIT (`perm_reduce=active_soft_mean`)
+
+Given $\gamma\ge 0$:
+$$
+a_{b,j}=\mathbf{1}[E_{b,j}>\tau],\qquad
+u_{b,j}=a_{b,j}+\gamma(1-a_{b,j}),\qquad
+w_{b,j}=\frac{u_{b,j}}{\max\!\left(\sum_{m=1}^{K}u_{b,m},\varepsilon\right)}
+$$
+
+Permutation cost:
+$$
+C_{b,\pi}=\sum_{j=1}^{K} w_{b,j}\,v_{b,\pi,j}.
+$$
+
+Then:
+$$
+\pi_b^*=\arg\min_{\pi\in S_K} C_{b,\pi},\qquad
+m_b=C_{b,\pi_b^*}.
+$$
+
+### 4) Batch reduction and optional threshold
+
+After per-item best costs $m_b$ are obtained:
+- if `threshold_byloss=False`:
+  $$
+  L_{\text{PIT}}=\frac{1}{B}\sum_{b=1}^{B} m_b.
+  $$
+- if `threshold_byloss=True`:
+  keep only entries with $m_b>-30$ **if at least one exists**, then average those; otherwise average all $m_b$.
+
+### 5) Reordered estimates returned by PIT
+
+When reordered estimates are requested, PIT returns:
+$$
+\hat{s}^{\text{reord}}_{b,j}=\hat{s}_{b,\pi_b^*(j)}.
+$$
+
+### 6) Other `pit_from` modes in this file
+
+- `pw_pt`: builds pairwise matrix explicitly by looping over $(i,j)$, then applies the same PIT math above.
+- `perm_avg`: computes base loss directly per permutation on reordered estimates and chooses argmin over permutations.
+- `pw_mtx_broadcast`: standard PIT term plus an auxiliary term
+  $$
+  +\ 0.5\cdot \text{mean}\bigl(\text{loss\_func}[1](\hat{S}^{\text{reord}}, S^*)\bigr).
+  $$
+- `pw_mtx_multidecoder_keepmtx` and `pw_mtx_multidecoder_batchmin`: multi-decoder variants with block aggregation exactly as coded.
+
 ## Implemented Description: `look2hear/losses/matrix.py::PairwiseNegSISDRSilenceAware(_Loss)`
 
 This section documents the exact implementation of `PairwiseNegSISDRSilenceAware` in `look2hear/losses/matrix.py`, including what is done in code and how it is used by TSE-ECHI training.
