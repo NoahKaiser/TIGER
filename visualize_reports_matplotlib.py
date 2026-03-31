@@ -34,6 +34,50 @@ ECHI_DEFAULT_METRICS = [
     "residual_loss",
 ]
 
+METRIC_DISPLAY_NAMES = {
+    "se_sisdr": "SE-SI-SDR",
+    "se_sisdr_i": "SE-SI-SDRi",
+    "se_sisdr_all": "SE-SI-SDR (All)",
+    "se_sisdr_all_i": "SE-SI-SDRi (All)",
+    "sisdr": "SI-SDR",
+    "sisdr_i": "SI-SDRi",
+    "sisdr_active": "SI-SDR (Active)",
+    "sisdr_active_i": "SI-SDRi (Active)",
+    "sdr": "SDR",
+    "sdr_i": "SDRi",
+    "snr": "SNR",
+    "snr_i": "SNRi",
+    "residual_loss": "Normalized MSE",
+}
+
+
+MODE_DISPLAY_NAMES = {
+    "target_sum": "noise-free",
+    "manifest": "noisy",
+}
+
+
+def _humanize_label(value: str) -> str:
+    return str(value).replace("_", " ").strip().title()
+
+
+def metric_display_name(metric: str) -> str:
+    return METRIC_DISPLAY_NAMES.get(metric, _humanize_label(metric))
+
+
+def session_display_name(session: str) -> str:
+    value = str(session)
+    m = re.fullmatch(r"dev_(\d+)", value, flags=re.IGNORECASE)
+    if m:
+        return f"Dev {int(m.group(1))}"
+    if value.lower() == "all":
+        return "All"
+    return _humanize_label(value)
+
+
+def mode_display_name(mode: str) -> str:
+    return MODE_DISPLAY_NAMES.get(mode, _humanize_label(mode))
+
 
 def sort_sessions(sessions: list[str]) -> list[str]:
     def key(s: str):
@@ -186,6 +230,7 @@ def plot_legacy_single_csv(
     max_points_per_group: int,
 ) -> None:
     sessions = sort_sessions([s for s in data["session"].dropna().unique()])
+    display_sessions = [session_display_name(s) for s in sessions]
     if not sessions:
         raise ValueError("No sessions found in input CSV.")
 
@@ -204,14 +249,14 @@ def plot_legacy_single_csv(
         box_scatter(
             ax,
             values,
-            sessions,
+            display_sessions,
             seed=seed + i,
             max_points_per_group=max_points_per_group,
             show_legend=(i == 0),
             legend_title="Session",
         )
-        ax.set_ylabel(metric)
-        cnt = ", ".join(f"{s}:{len(v)}" for s, v in zip(sessions, values))
+        ax.set_ylabel(metric_display_name(metric))
+        cnt = ", ".join(f"{s}: {len(v)}" for s, v in zip(display_sessions, values))
         ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Session")
@@ -279,6 +324,7 @@ def plot_distributions_by_mode(
     seed: int,
     max_points_per_group: int,
 ) -> None:
+    display_modes = [mode_display_name(m) for m in modes]
     fig, axes = plt.subplots(
         nrows=len(metrics),
         ncols=1,
@@ -300,14 +346,14 @@ def plot_distributions_by_mode(
         box_scatter(
             ax,
             values,
-            modes,
+            display_modes,
             seed=seed + i,
             max_points_per_group=max_points_per_group,
             show_legend=(i == 0),
             legend_title="Mixture mode",
         )
-        ax.set_ylabel(metric)
-        cnt = ", ".join(f"{m}:{len(v)}" for m, v in zip(modes, values))
+        ax.set_ylabel(metric_display_name(metric))
+        cnt = ", ".join(f"{m}: {len(v)}" for m, v in zip(display_modes, values))
         ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Mixture mode")
@@ -371,16 +417,16 @@ def plot_trends_by_n_active(
             y_hi = stats["q75"].to_numpy(dtype=float)
             c = colors[i % len(colors)]
 
-            ax.plot(x, y, marker="o", linewidth=1.8, color=c, label=mode)
+            ax.plot(x, y, marker="o", linewidth=1.8, color=c, label=mode_display_name(mode))
             ax.fill_between(x, y_lo, y_hi, color=c, alpha=0.18, linewidth=0.0)
 
-        ax.set_ylabel(metric)
+        ax.set_ylabel(metric_display_name(metric))
         ax.grid(axis="y", alpha=0.25)
         ax.axhline(0, linewidth=1.0, color="0.5", alpha=0.5)
         if ax_i == 0:
             ax.legend(loc="best", frameon=False, fontsize=9)
 
-    axes[-1].set_xlabel("n_active")
+    axes[-1].set_xlabel("Number of Active Speakers")
     axes[-1].set_xticks(n_active_values)
     fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
     print(f"Saved: {out_png}")
@@ -408,6 +454,7 @@ def plot_session_delta_heatmap(
     sessions = sort_sessions(df["session"].dropna().astype(str).unique().tolist())
     if not sessions:
         return False
+    display_sessions = [session_display_name(s) for s in sessions]
 
     means = df.groupby(["session", "mixture_mode"], dropna=False)[metrics].mean()
     matrix = np.full((len(metrics), len(sessions)), np.nan, dtype=float)
@@ -434,10 +481,13 @@ def plot_session_delta_heatmap(
     )
     im = ax.imshow(matrix, cmap="coolwarm", aspect="auto", norm=norm)
     ax.set_xticks(np.arange(len(sessions)))
-    ax.set_xticklabels(sessions, rotation=45, ha="right")
+    ax.set_xticklabels(display_sessions, rotation=45, ha="right")
     ax.set_yticks(np.arange(len(metrics)))
-    ax.set_yticklabels(metrics)
-    ax.set_title(f"Session mean delta: {compare_mode} - {base_mode}")
+    ax.set_yticklabels([metric_display_name(m) for m in metrics])
+    ax.set_title(
+        "Session mean delta: "
+        f"{mode_display_name(compare_mode)} - {mode_display_name(base_mode)}"
+    )
 
     for i in range(len(metrics)):
         for j in range(len(sessions)):
