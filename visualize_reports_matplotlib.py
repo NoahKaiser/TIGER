@@ -79,6 +79,18 @@ def mode_display_name(mode: str) -> str:
     return MODE_DISPLAY_NAMES.get(mode, _humanize_label(mode))
 
 
+def save_png_and_pgf(fig, out_path: Path, dpi: int) -> None:
+    out_png = Path(out_path)
+    if out_png.suffix.lower() != ".png":
+        out_png = out_png.with_suffix(".png")
+    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
+    print(f"Saved: {out_png}")
+
+    out_pgf = out_png.with_suffix(".pgf")
+    fig.savefig(out_pgf, bbox_inches="tight")
+    print(f"Saved: {out_pgf}")
+
+
 def sort_sessions(sessions: list[str]) -> list[str]:
     def key(s: str):
         m = re.search(r"dev_(\d+)", s)
@@ -260,8 +272,7 @@ def plot_legacy_single_csv(
         ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Session")
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    print(f"Saved: {out}")
+    save_png_and_pgf(fig, out, dpi)
 
 
 def discover_variant_files(results_dir: Path) -> list[tuple[str, Path]]:
@@ -357,8 +368,7 @@ def plot_distributions_by_mode(
         ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Mixture mode")
-    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
-    print(f"Saved: {out_png}")
+    save_png_and_pgf(fig, out_png, dpi)
 
 
 def plot_trends_by_n_active(
@@ -428,8 +438,7 @@ def plot_trends_by_n_active(
 
     axes[-1].set_xlabel("Number of Active Speakers")
     axes[-1].set_xticks(n_active_values)
-    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
-    print(f"Saved: {out_png}")
+    save_png_and_pgf(fig, out_png, dpi)
 
 
 def plot_session_delta_heatmap(
@@ -498,8 +507,7 @@ def plot_session_delta_heatmap(
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.9)
     cbar.set_label("Delta (dB / metric units)")
-    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
-    print(f"Saved: {out_png}")
+    save_png_and_pgf(fig, out_png, dpi)
     return True
 
 
