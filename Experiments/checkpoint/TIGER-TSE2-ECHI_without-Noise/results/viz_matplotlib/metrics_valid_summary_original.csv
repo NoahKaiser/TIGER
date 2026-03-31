@@ -1,0 +1,3 @@
+mixture_mode,num_segments,num_segments_with_active_targets,num_segments_without_active_targets,num_segments_with_model_residual,se_sisdr_all_mean,se_sisdr_all_i_mean,sisdr_active_mean,sisdr_active_i_mean,residual_loss_mean,activity_tau
+manifest,7290,7079,211,7290,-46.87811673848554,10.37314891422727,-22.83455968927,3.308721555661879,1.7815038607002265,1e-06
+target_sum,7290,7079,211,7290,-22.89951427311564,12.791503558351833,25.10815555122962,1.968224973031094,0.0059742299143168,1e-06
