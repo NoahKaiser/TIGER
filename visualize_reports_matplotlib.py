@@ -57,12 +57,32 @@ MODE_DISPLAY_NAMES = {
 }
 
 
+def configure_plot_fonts() -> None:
+    # STIX is a close matplotlib-native match to TeX-like (txfonts-style) serif text.
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": [
+                "STIX Two Text",
+                "STIXGeneral",
+                "Times New Roman",
+                "Nimbus Roman",
+                "DejaVu Serif",
+            ],
+            "mathtext.fontset": "stix",
+        }
+    )
+
+
 def _humanize_label(value: str) -> str:
     return str(value).replace("_", " ").strip().title()
 
 
 def metric_display_name(metric: str) -> str:
-    return METRIC_DISPLAY_NAMES.get(metric, _humanize_label(metric))
+    name = METRIC_DISPLAY_NAMES.get(metric, _humanize_label(metric))
+    if "sdr" in str(metric).lower() and "[dB]" not in name:
+        return f"{name} [dB]"
+    return name
 
 
 def session_display_name(session: str) -> str:
@@ -79,16 +99,17 @@ def mode_display_name(mode: str) -> str:
     return MODE_DISPLAY_NAMES.get(mode, _humanize_label(mode))
 
 
-def save_png_and_pgf(fig, out_path: Path, dpi: int) -> None:
+def save_png_and_pgf(fig, out_path: Path, dpi: int, pfg: bool) -> None:
     out_png = Path(out_path)
     if out_png.suffix.lower() != ".png":
         out_png = out_png.with_suffix(".png")
     fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
     print(f"Saved: {out_png}")
 
-    out_pgf = out_png.with_suffix(".pgf")
-    fig.savefig(out_pgf, bbox_inches="tight")
-    print(f"Saved: {out_pgf}")
+    if pfg:
+        out_pgf = out_png.with_suffix(".pgf")
+        fig.savefig(out_pgf, bbox_inches="tight")
+        print(f"Saved: {out_pgf}")
 
 
 def sort_sessions(sessions: list[str]) -> list[str]:
@@ -238,6 +259,8 @@ def plot_legacy_single_csv(
     metrics: list[str],
     out: Path,
     dpi: int,
+    pfg: bool,
+    show_sample_counts: bool,
     seed: int,
     max_points_per_group: int,
 ) -> None:
@@ -268,11 +291,12 @@ def plot_legacy_single_csv(
             legend_title="Session",
         )
         ax.set_ylabel(metric_display_name(metric))
-        cnt = ", ".join(f"{s}: {len(v)}" for s, v in zip(display_sessions, values))
-        ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
+        if show_sample_counts:
+            cnt = ", ".join(f"{s}: {len(v)}" for s, v in zip(display_sessions, values))
+            ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Session")
-    save_png_and_pgf(fig, out, dpi)
+    save_png_and_pgf(fig, out, dpi, pfg)
 
 
 def discover_variant_files(results_dir: Path) -> list[tuple[str, Path]]:
@@ -332,6 +356,8 @@ def plot_distributions_by_mode(
     metrics: list[str],
     out_png: Path,
     dpi: int,
+    pfg: bool,
+    show_sample_counts: bool,
     seed: int,
     max_points_per_group: int,
 ) -> None:
@@ -364,11 +390,12 @@ def plot_distributions_by_mode(
             legend_title="Mixture mode",
         )
         ax.set_ylabel(metric_display_name(metric))
-        cnt = ", ".join(f"{m}: {len(v)}" for m, v in zip(display_modes, values))
-        ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
+        if show_sample_counts:
+            cnt = ", ".join(f"{m}: {len(v)}" for m, v in zip(display_modes, values))
+            ax.text(0.99, 0.98, cnt, ha="right", va="top", fontsize=8, transform=ax.transAxes)
 
     axes[-1].set_xlabel("Mixture mode")
-    save_png_and_pgf(fig, out_png, dpi)
+    save_png_and_pgf(fig, out_png, dpi, pfg)
 
 
 def plot_trends_by_n_active(
@@ -377,6 +404,7 @@ def plot_trends_by_n_active(
     metrics: list[str],
     out_png: Path,
     dpi: int,
+    pfg: bool,
 ) -> None:
     if "n_active" not in df.columns:
         return
@@ -438,7 +466,7 @@ def plot_trends_by_n_active(
 
     axes[-1].set_xlabel("Number of Active Speakers")
     axes[-1].set_xticks(n_active_values)
-    save_png_and_pgf(fig, out_png, dpi)
+    save_png_and_pgf(fig, out_png, dpi, pfg)
 
 
 def plot_session_delta_heatmap(
@@ -446,6 +474,7 @@ def plot_session_delta_heatmap(
     metrics: list[str],
     out_png: Path,
     dpi: int,
+    pfg: bool,
 ) -> bool:
     if "session" not in df.columns or "mixture_mode" not in df.columns:
         return False
@@ -507,7 +536,7 @@ def plot_session_delta_heatmap(
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.9)
     cbar.set_label("Delta (dB / metric units)")
-    save_png_and_pgf(fig, out_png, dpi)
+    save_png_and_pgf(fig, out_png, dpi, pfg)
     return True
 
 
@@ -528,6 +557,8 @@ def run_legacy_mode(args: argparse.Namespace) -> None:
         metrics=args.metrics,
         out=out,
         dpi=args.dpi,
+        pfg=args.pfg,
+        show_sample_counts=args.show_sample_counts,
         seed=args.seed,
         max_points_per_group=args.max_points_per_group,
     )
@@ -537,6 +568,7 @@ def run_echi_results_mode(args: argparse.Namespace) -> None:
     results_dir = Path(args.results_dir)
     if not results_dir.exists():
         raise FileNotFoundError(f"results_dir does not exist: {results_dir}")
+    experiment_name = results_dir.parent.name if results_dir.parent.name else results_dir.name
 
     combined, modes, summary_df = load_echi_results_dir(
         results_dir=results_dir,
@@ -554,30 +586,30 @@ def run_echi_results_mode(args: argparse.Namespace) -> None:
     out_dir = Path(args.out_dir) if args.out_dir else (results_dir / "viz_matplotlib")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    combined_out = out_dir / "metrics_valid_combined.csv"
+    combined_out = out_dir / f"{experiment_name}_metrics_valid_combined.csv"
     combined.to_csv(combined_out, index=False)
     print(f"Saved: {combined_out}")
 
     by_mode = summarize_metrics(combined, ["mixture_mode"], metrics)
-    by_mode_out = out_dir / "summary_by_mode.csv"
+    by_mode_out = out_dir / f"{experiment_name}_summary_by_mode.csv"
     by_mode.to_csv(by_mode_out, index=False)
     print(f"Saved: {by_mode_out}")
 
     if "n_active" in combined.columns:
         with_n_active = combined.dropna(subset=["n_active"]).copy()
         by_mode_n_active = summarize_metrics(with_n_active, ["mixture_mode", "n_active"], metrics)
-        by_mode_n_active_out = out_dir / "summary_by_mode_n_active.csv"
+        by_mode_n_active_out = out_dir / f"{experiment_name}_summary_by_mode_n_active.csv"
         by_mode_n_active.to_csv(by_mode_n_active_out, index=False)
         print(f"Saved: {by_mode_n_active_out}")
 
     if "session" in combined.columns:
         by_mode_session = summarize_metrics(combined, ["mixture_mode", "session"], metrics)
-        by_mode_session_out = out_dir / "summary_by_mode_session.csv"
+        by_mode_session_out = out_dir / f"{experiment_name}_summary_by_mode_session.csv"
         by_mode_session.to_csv(by_mode_session_out, index=False)
         print(f"Saved: {by_mode_session_out}")
 
     if summary_df is not None:
-        summary_copy = out_dir / "metrics_valid_summary_original.csv"
+        summary_copy = out_dir / f"{experiment_name}_metrics_valid_summary_original.csv"
         summary_df.to_csv(summary_copy, index=False)
         print(f"Saved: {summary_copy}")
 
@@ -585,8 +617,10 @@ def run_echi_results_mode(args: argparse.Namespace) -> None:
         df=combined,
         modes=modes,
         metrics=metrics,
-        out_png=out_dir / "distributions_by_mode.png",
+        out_png=out_dir / f"{experiment_name}_distributions_by_mode.png",
         dpi=args.dpi,
+        pfg=args.pfg,
+        show_sample_counts=args.show_sample_counts,
         seed=args.seed,
         max_points_per_group=args.max_points_per_group,
     )
@@ -594,14 +628,16 @@ def run_echi_results_mode(args: argparse.Namespace) -> None:
         df=combined,
         modes=modes,
         metrics=metrics,
-        out_png=out_dir / "trends_by_n_active.png",
+        out_png=out_dir / f"{experiment_name}_trends_by_n_active.png",
         dpi=args.dpi,
+        pfg=args.pfg,
     )
     _ = plot_session_delta_heatmap(
         df=combined,
         metrics=metrics,
-        out_png=out_dir / "session_delta_heatmap.png",
+        out_png=out_dir / f"{experiment_name}_session_delta_heatmap.png",
         dpi=args.dpi,
+        pfg=args.pfg,
     )
 
 
@@ -656,16 +692,27 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--dpi", type=int, default=200)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
+        "--pfg",
+        action="store_true",
+        help="Also write PGF outputs (default: PNG only).",
+    )
+    ap.add_argument(
         "--max_points_per_group",
         type=int,
         default=900,
         help="Cap number of jittered points per group to keep plots readable.",
+    )
+    ap.add_argument(
+        "--show_sample_counts",
+        action="store_true",
+        help="Show sample-count annotation in the top-right of box/scatter subplots.",
     )
     return ap
 
 
 def main():
     args = build_parser().parse_args()
+    configure_plot_fonts()
     if args.results_dir:
         run_echi_results_mode(args)
     else:
