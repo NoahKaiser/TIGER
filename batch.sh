@@ -92,6 +92,6 @@
 
 uv run visualize_reports_matplotlib.py \
   --results_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results \
-  --out_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results/viz_matplotlib \
-  --metrics se_sisdr_all_i sisdr_active_i residual_loss \
-  --dpi 220
+ --out_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results/viz_matplotlib \
+  --metrics se_sisdr_all se_sisdr_all_i sisdr_active sisdr_active_i residual_loss \
+  --dpi 300
