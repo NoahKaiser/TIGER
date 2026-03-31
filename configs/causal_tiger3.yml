@@ -38,7 +38,7 @@ training:
     patience: 20
     verbose: true
   SpeedAug: False
-  ckpt_path: #/usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/epoch=157.ckpt
+  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER3-on-EchoSet/epoch=153.ckpt
   checkpoint:
     monitor: "val_loss/dataloader_idx_0"
     mode: "min"

@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=TIGER-TSE2-ECHI_without-Noise_with_standard_PIT
+#SBATCH --job-name=causal_tiger2_from_ckpt159
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -9,7 +9,7 @@
 #SBATCH --mem=16G
 #SBATCH --gpus=1
 #SBATCH --qos=batch
-#SBATCH --nodelist=linse20
+#SBATCH --nodelist=linse19
 
 
 
@@ -17,7 +17,7 @@
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tse_tiger_FiLMCross.yml
 #uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_SubsetECHI2.yml
-uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_tse2.yml
+uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger2.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
                                                              # --output_root /no_backups/s1495 \
@@ -30,6 +30,7 @@ uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_tse2.yml
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger2.yml
 #uv run --extra=cu118 audio_test_EchoSet.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/conf.yml --save_dir /no_backups/s1495/TIGER/CausalTIGER_on_EchoSet
+#uv run --extra=cu118 audio_test_ECHI.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/conf.yml --save_dir /no_backups/s1495/TIGER/TIGER-TSE2-ECHI_without-Noise
 #-> verwende cu118 wegen der GPU GTX 1080 Ti
 
 #uv run visualize_reports_matplotlib.py --metrics_csv \
@@ -76,3 +77,8 @@ uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_tse2.yml
   #--device auto \
   #--num_trials 100 \
   #--seed 0
+
+#uv run --extra=cu118 analyze_echi_activity_weights.py \
+ # --conf configs/tiger_tse2.yml \
+  #--split train \
+  #--out_dir /no_backups/s1495/activity_weight_analysis
