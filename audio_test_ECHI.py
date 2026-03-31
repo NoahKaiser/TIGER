@@ -81,7 +81,9 @@ class ECHIVariantMetricsTracker:
 
     Metrics:
     - se_sisdr_all: SE-SI-SDR on complete set (includes silent targets).
-    - sisdr_active: SI-SDR computed only on active targets.
+    - se_sisdr_all_i: SE-SI-SDR improvement over mixture baseline.
+    - sisdr_active: SI-SDR (zero-mean=False) only on active targets.
+    - sisdr_active_i: SI-SDR (zero-mean=False) improvement over mixture baseline.
     - residual_loss: normalized residual MSE (only when model returns explicit residual).
     """
 
@@ -90,7 +92,9 @@ class ECHIVariantMetricsTracker:
         self.eps = float(eps)
 
         self.se_sisdr_all_values = []
+        self.se_sisdr_all_i_values = []
         self.sisdr_active_values = []
+        self.sisdr_active_i_values = []
         self.residual_loss_values = []
         self.num_segments = 0
         self.num_segments_no_active = 0
@@ -101,7 +105,9 @@ class ECHIVariantMetricsTracker:
             "snt_id",
             "n_active",
             "se_sisdr_all",
+            "se_sisdr_all_i",
             "sisdr_active",
+            "sisdr_active_i",
             "residual_loss",
             "has_model_residual",
         ]
@@ -119,10 +125,6 @@ class ECHIVariantMetricsTracker:
                 f"Expected estimate and clean_active to be 2D [n_src, T], got {estimate.shape} and {clean_active.shape}"
             )
 
-        # Match repository SI-SDR convention (zero-mean=True).
-        estimate = estimate - estimate.mean(dim=1, keepdim=True)
-        clean_active = clean_active - clean_active.mean(dim=1, keepdim=True)
-
         s_estimate = estimate.unsqueeze(1)  # [n_est, 1, T]
         s_target = clean_active.unsqueeze(0)  # [1, n_active, T]
         pair_wise_dot = torch.sum(s_estimate * s_target, dim=2, keepdim=True)  # [n_est, n_active, 1]
@@ -133,6 +135,15 @@ class ECHIVariantMetricsTracker:
         ratio = torch.sum(pair_wise_proj ** 2, dim=2) / (torch.sum(e_noise ** 2, dim=2) + self.eps)
         pair_wise_sisdr = 10.0 * torch.log10(ratio + self.eps)
         return -pair_wise_sisdr
+
+    def _compute_se_sisdr_all_metric(self, estimate: torch.Tensor, clean: torch.Tensor) -> float:
+        se_loss = self.pit_se_sisdr(estimate.unsqueeze(0), clean.unsqueeze(0))
+        return -float(se_loss.item())
+
+    def _compute_sisdr_active_metric(self, estimate: torch.Tensor, clean_active: torch.Tensor) -> float:
+        sisdr_loss_mtx = self._pairwise_sisdr_loss_rect(estimate, clean_active)
+        best_active_loss = self._best_rect_assignment_mean(sisdr_loss_mtx)
+        return -float(best_active_loss.item())
 
     @staticmethod
     def _best_rect_assignment_mean(loss_mtx: torch.Tensor) -> torch.Tensor:
@@ -183,9 +194,14 @@ class ECHIVariantMetricsTracker:
         self.num_segments += 1
 
         # 1) SE-SI-SDR on complete set (silent targets included)
-        se_loss = self.pit_se_sisdr(estimate.unsqueeze(0), clean.unsqueeze(0))
-        se_sisdr_all = -float(se_loss.item())
+        se_sisdr_all = self._compute_se_sisdr_all_metric(estimate=estimate, clean=clean)
         self.se_sisdr_all_values.append(se_sisdr_all)
+        baseline_all = mix.unsqueeze(0).repeat(clean.shape[0], 1)
+        se_sisdr_all_baseline = self._compute_se_sisdr_all_metric(
+            estimate=baseline_all, clean=clean
+        )
+        se_sisdr_all_i = se_sisdr_all - se_sisdr_all_baseline
+        self.se_sisdr_all_i_values.append(se_sisdr_all_i)
 
         # 2) SI-SDR only for active targets
         target_energy = (clean ** 2).mean(dim=1)
@@ -193,13 +209,21 @@ class ECHIVariantMetricsTracker:
         n_active = int(active_mask.sum().item())
 
         sisdr_active = ""
+        sisdr_active_i = ""
         if n_active > 0:
             clean_active = clean[active_mask]
-            sisdr_loss_mtx = self._pairwise_sisdr_loss_rect(estimate, clean_active)
-            best_active_loss = self._best_rect_assignment_mean(sisdr_loss_mtx)
-            sisdr_active_value = -float(best_active_loss.item())
+            baseline_active = mix.unsqueeze(0).repeat(estimate.shape[0], 1)
+
+            sisdr_active_value = self._compute_sisdr_active_metric(
+                estimate=estimate, clean_active=clean_active
+            )
+            sisdr_active_baseline = self._compute_sisdr_active_metric(
+                estimate=baseline_active, clean_active=clean_active
+            )
             sisdr_active = sisdr_active_value
+            sisdr_active_i = sisdr_active_value - sisdr_active_baseline
             self.sisdr_active_values.append(sisdr_active_value)
+            self.sisdr_active_i_values.append(sisdr_active_i)
         else:
             self.num_segments_no_active += 1
 
@@ -218,7 +242,9 @@ class ECHIVariantMetricsTracker:
                 "snt_id": key,
                 "n_active": n_active,
                 "se_sisdr_all": se_sisdr_all,
+                "se_sisdr_all_i": se_sisdr_all_i,
                 "sisdr_active": sisdr_active,
+                "sisdr_active_i": sisdr_active_i,
                 "residual_loss": residual_loss,
                 "has_model_residual": int(has_model_residual),
             }
@@ -231,7 +257,9 @@ class ECHIVariantMetricsTracker:
             "num_segments_without_active_targets": int(self.num_segments_no_active),
             "num_segments_with_model_residual": int(self.num_segments_with_model_residual),
             "se_sisdr_all_mean": self._mean_or_nan(self.se_sisdr_all_values),
+            "se_sisdr_all_i_mean": self._mean_or_nan(self.se_sisdr_all_i_values),
             "sisdr_active_mean": self._mean_or_nan(self.sisdr_active_values),
+            "sisdr_active_i_mean": self._mean_or_nan(self.sisdr_active_i_values),
             "residual_loss_mean": self._mean_or_nan(self.residual_loss_values),
             "activity_tau": float(self.activity_tau),
         }
@@ -424,7 +452,9 @@ def main(config):
             summary_rows.append(summary_with_variant)
             print(
                 f"[{mixture_mode}] se_sisdr_all_mean={summary['se_sisdr_all_mean']:.4f}, "
+                f"se_sisdr_all_i_mean={summary['se_sisdr_all_i_mean']:.4f}, "
                 f"sisdr_active_mean={summary['sisdr_active_mean']:.4f}, "
+                f"sisdr_active_i_mean={summary['sisdr_active_i_mean']:.4f}, "
                 f"residual_loss_mean={summary['residual_loss_mean']:.6f}, "
                 f"segments={summary['num_segments']}, "
                 f"no_active={summary['num_segments_without_active_targets']}, "
@@ -472,7 +502,9 @@ def main(config):
                 "num_segments_without_active_targets",
                 "num_segments_with_model_residual",
                 "se_sisdr_all_mean",
+                "se_sisdr_all_i_mean",
                 "sisdr_active_mean",
+                "sisdr_active_i_mean",
                 "residual_loss_mean",
                 "activity_tau",
             ]
