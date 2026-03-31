@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=causal_tiger2_from_ckpt159
+#SBATCH --job-name=TIGER-TSE2-ECHI_with_Noise_but_with_standard_PIT
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -17,7 +17,7 @@
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tiger_tse_selfcross.yml
 #uv run --extra=cu118 audio_train_tse.py --conf_dir configs/tse_tiger_FiLMCross.yml
 #uv run --extra=cu118 audio_train_on_Subset.py --conf_dir configs/tiger_on_SubsetECHI2.yml
-uv run --extra=cu118 audio_train.py --conf_dir configs/causal_tiger2.yml
+uv run --extra=cu118 audio_train.py --conf_dir configs/tiger_tse2.yml
 
 #uv run --extra=cpu DataPreProcess/preprocess_tse_echi.py --echi_root /misc/data/public/CHiME9 \
                                                              # --output_root /no_backups/s1495 \

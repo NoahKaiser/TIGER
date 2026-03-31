@@ -1,0 +1,70 @@
+audionet:
+  audionet_config:
+    in_channels: 256
+    num_blocks: 4
+    num_sources: 1
+    out_channels: 128
+    stride: 160
+    upsampling_depth: 5
+    win: 640
+  audionet_name: TSE_TIGER_FiLM2
+datamodule:
+  data_config:
+    batch_size: 4
+    has_test_targets: false
+    n_src: 4
+    num_workers: 8
+    only_valid_speech_region: true
+    persistent_workers: false
+    pin_memory: true
+    sample_rate: 16000
+    segment: 3.0
+    spk_emb_path: /no_backups/s1495/ECHI_spk_embeddings/ECAPA_embeddings/ecapa_embeddings.pt
+    test_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/eval
+    train_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_TSE_ECHI/ha/dev
+    valid_speech_metadata_root: /data/public/CHiME9/metadata/ref
+    verify_spk_alignment: false
+  data_name: TSE_ECHIDataModule
+exp:
+  exp_name: TSE-TIGER-FiLM2-TSE_ECHI_smallerLR
+loss:
+  train:
+    config: {}
+    loss_func: null
+    sdr_type: pairwise_neg_sisdr
+  val:
+    config: {}
+    loss_func: null
+    sdr_type: pairwise_neg_sisdr
+main_args:
+  exp_dir: /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TSE-TIGER-FiLM2-TSE_ECHI_smallerLR
+optimizer:
+  lr: 0.0001
+  optim_name: adam
+  weight_decay: 0
+options:
+  conf_dir: configs/tiger_tse_film2.yml
+  help: null
+scheduler:
+  sche_config: {}
+  sche_name: null
+training:
+  SpeedAug: false
+  checkpoint:
+    mode: min
+    monitor: val_loss
+    save_last: true
+    save_top_k: 5
+    verbose: true
+  ckpt_path: null
+  early_stop:
+    mode: min
+    monitor: val_loss
+    patience: 20
+    verbose: true
+  epochs: 500
+  gpus:
+  - 0
+  parallel: ddp
+  system: AudioLightningModuleTSE_ECHI

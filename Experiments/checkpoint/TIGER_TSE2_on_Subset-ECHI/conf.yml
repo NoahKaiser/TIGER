@@ -1,0 +1,89 @@
+audionet:
+  audionet_config:
+    enforce_partition: true
+    in_channels: 256
+    num_blocks: 4
+    num_sources: 4
+    out_channels: 160
+    predict_residual: true
+    stride: 160
+    upsampling_depth: 5
+    win: 640
+  audionet_name: TSE_TIGER2
+datamodule:
+  data_config:
+    batch_size: 1
+    n_src: 4
+    num_workers: 8
+    persistent_workers: false
+    pin_memory: true
+    sample_rate: 16000
+    segment: 3.0
+    test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
+    train_dir: /no_backups/s1495/Processed_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_ECHI/ha/train
+  data_name: ECHIDataModule
+exp:
+  exp_name: TIGER_TSE2_on_Subset-ECHI
+loss:
+  train:
+    config:
+      perm_reduce: active_soft_mean
+      pit_from: pw_mtx
+      threshold_byloss: false
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_sisdr_silence_aware
+  val:
+    config:
+      pit_from: pw_mtx
+      threshold_byloss: false
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_se_sisdr
+main_args:
+  exp_dir: /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER_TSE2_on_Subset-ECHI
+optimizer:
+  lr: 0.0005
+  optim_name: adam
+  weight_decay: 0
+options:
+  conf_dir: configs/tiger_on_SubsetECHI2.yml
+  help: null
+scheduler:
+  sche_config: {}
+  sche_name: null
+subset:
+  n_test: null
+  n_train: null
+  n_val: null
+  shuffle_train: false
+  test_indices: null
+  train_indices:
+  - 8
+  - 1000
+  - 2000
+  - 4000
+  val_indices:
+  - 8
+  - 1000
+  - 2000
+  - 4000
+training:
+  SpeedAug: false
+  checkpoint:
+    mode: min
+    monitor: val_total_loss
+    save_last: true
+    save_top_k: 5
+    verbose: true
+  ckpt_path: null
+  early_stop: null
+  epochs: 100000
+  gpus:
+  - 0
+  lambda_res: 0.5
+  parallel: ddp
+  pit_activity_beta: 8.0
+  pit_activity_gamma: 0.05
+  pit_activity_tau: 1.0e-06
+  pit_silence_weight: 0.1
+  system: AudioLightningModuleECHI

@@ -1,0 +1,80 @@
+audionet:
+  audionet_config:
+    enforce_partition: true
+    in_channels: 256
+    num_blocks: 4
+    num_sources: 4
+    out_channels: 160
+    predict_residual: true
+    stride: 160
+    upsampling_depth: 5
+    win: 640
+  audionet_name: TSE_TIGER2
+datamodule:
+  data_config:
+    batch_size: 3
+    mixture_mode: target_sum
+    n_src: 4
+    num_workers: 8
+    persistent_workers: false
+    pin_memory: true
+    sample_rate: 16000
+    segment: 3.0
+    test_dir: /no_backups/s1495/Processed_ECHI/ha/eval
+    train_dir: /no_backups/s1495/Processed_ECHI/ha/train
+    valid_dir: /no_backups/s1495/Processed_ECHI/ha/dev
+  data_name: ECHIDataModule
+exp:
+  exp_name: TIGER-TSE2-ECHI_without-Noise
+loss:
+  train:
+    config:
+      perm_reduce: active_soft_mean
+      pit_from: pw_mtx
+      threshold_byloss: false
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_sisdr_silence_aware
+  val:
+    config:
+      pit_from: pw_mtx
+      threshold_byloss: false
+    loss_func: PITLossWrapper
+    sdr_type: pairwise_neg_se_sisdr
+main_args:
+  exp_dir: /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise
+optimizer:
+  lr: 0.001
+  optim_name: adam
+  weight_decay: 0
+options:
+  conf_dir: configs/tiger_tse2.yml
+  help: null
+scheduler:
+  sche_config:
+    factor: 0.5
+    patience: 10
+  sche_name: ReduceLROnPlateau
+training:
+  SpeedAug: false
+  checkpoint:
+    mode: min
+    monitor: val_total_loss
+    save_last: true
+    save_top_k: 5
+    verbose: true
+  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=63.ckpt
+  early_stop:
+    mode: min
+    monitor: val_total_loss
+    patience: 20
+    verbose: true
+  epochs: 500
+  gpus:
+  - 0
+  lambda_res: 0.5
+  parallel: ddp
+  pit_activity_beta: 8.0
+  pit_activity_gamma: 0.05
+  pit_activity_tau: 1.0e-06
+  pit_silence_weight: 0.1
+  system: AudioLightningModuleECHI
