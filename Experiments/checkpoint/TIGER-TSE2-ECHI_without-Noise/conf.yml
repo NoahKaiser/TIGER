@@ -62,7 +62,7 @@ training:
     save_last: true
     save_top_k: 5
     verbose: true
-  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=63.ckpt
+  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=59.ckpt
   early_stop:
     mode: min
     monitor: val_total_loss

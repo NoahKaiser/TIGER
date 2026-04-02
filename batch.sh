@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 # Slurm parameters
-#SBATCH --job-name=visualize_reports_matplotlib
+#SBATCH --job-name=audio_test_TIGER-TSE2-ECHI_with_Noise_but_with_standard_PIT
 #SBATCH --output=slurm_logs/%x_%j.%N.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -28,15 +28,15 @@
   #--max_refs_per_speaker 1 \
   #--max_chunk_batch 32
 #uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger.yml
-#uv run --extra=cu128 audio_train.py --conf_dir configs/causal_tiger2.yml
+#uv run --extra=cu128 audio_train.py --conf_dir configs/tiger_tse2.yml
 #uv run --extra=cu118 audio_test_EchoSet.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/CausalTIGER-on-EchoSet/conf.yml --save_dir /no_backups/s1495/TIGER/CausalTIGER_on_EchoSet
 #uv run --extra=cu118 audio_test_ECHI.py --conf_dir /misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/conf.yml --save_dir /no_backups/s1495/TIGER/TIGER-TSE2-ECHI_without-Noise
-#uv run --extra=cu118 audio_test_ECHI.py \
- # --conf_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise_with_standard_PIT/conf.yml \
-  #--save_dir /no_backups/s1495/TIGER/TIGER-TSE2-ECHI_without-Noise_with_standard_PIT \
-  #--evaluate_modes manifest target_sum \
-  #--save_audio_count 20 \
-  #--save_audio_strategy evenly_spaced
+uv run --extra=cu118 audio_test_ECHI.py \
+  --conf_dir Experiments/checkpoint/TIGER-TSE2-ECHI_with_Noise_but_with_standard_PIT/conf.yml \
+  --save_dir /no_backups/s1495/TIGER/TIGER-TSE2-ECHI_with_Noise_but_with_standard_PIT \
+  --evaluate_modes manifest target_sum \
+  --save_audio_count 20 \
+  --save_audio_strategy evenly_spaced
 
 #-> verwende cu118 wegen der GPU GTX 1080 Ti
 
@@ -90,8 +90,8 @@
   #--split train \
   #--out_dir /no_backups/s1495/activity_weight_analysis
 
-uv run visualize_reports_matplotlib.py \
-  --results_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results \
- --out_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results/viz_matplotlib \
-  --metrics se_sisdr_all se_sisdr_all_i sisdr_active sisdr_active_i residual_loss \
-  --dpi 300
+#uv run visualize_reports_matplotlib.py \
+ # --results_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results \
+ #--out_dir Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/results/viz_matplotlib \
+ # --metrics se_sisdr_all se_sisdr_all_i sisdr_active sisdr_active_i residual_loss \
+  #--dpi 300
