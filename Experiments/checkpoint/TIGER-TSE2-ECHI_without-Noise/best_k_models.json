@@ -1,7 +1,7 @@
 {
-"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=50.ckpt": -21.337993621826172,
-"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=58.ckpt": -21.479991912841797,
-"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=59.ckpt": -21.66927146911621,
-"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=63.ckpt": -21.36150360107422,
-"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=64.ckpt": -21.515138626098633
+"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=97.ckpt": -23.584203720092773,
+"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=99.ckpt": -23.613515853881836,
+"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=109.ckpt": -23.745254516601562,
+"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=112.ckpt": -23.66095733642578,
+"/misc/usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=120.ckpt": -23.85016441345215
 }
