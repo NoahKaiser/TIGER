@@ -39,6 +39,10 @@ METRIC_DISPLAY_NAMES = {
     "se_sisdr_i": "SE-SI-SDRi",
     "se_sisdr_all": "SE-SI-SDR (All)",
     "se_sisdr_all_i": "SE-SI-SDRi (All)",
+    "si-snr": "SI-SDR [dB]",
+    "si-snr_i": "SI-SDRi [dB]",
+    "si_snr": "SI-SDR [dB]",
+    "si_snr_i": "SI-SDRi [dB]",
     "sisdr": "SI-SDR",
     "sisdr_i": "SI-SDRi",
     "sisdr_active": "SI-SDR (Active)",
@@ -97,6 +101,24 @@ def session_display_name(session: str) -> str:
 
 def mode_display_name(mode: str) -> str:
     return MODE_DISPLAY_NAMES.get(mode, _humanize_label(mode))
+
+
+def infer_experiment_name_from_metrics_csv(metrics_csv: str | Path) -> str | None:
+    path = Path(metrics_csv)
+    if path.parent.name == "results" and path.parent.parent.name:
+        return path.parent.parent.name
+    if path.parent.name:
+        return path.parent.name
+    return None
+
+
+def prefix_output_with_experiment(out_path: Path, experiment_name: str | None) -> Path:
+    if not experiment_name:
+        return out_path
+    prefix = f"{experiment_name}_"
+    if out_path.name.startswith(prefix):
+        return out_path
+    return out_path.with_name(f"{prefix}{out_path.name}")
 
 
 def save_png_and_pgf(fig, out_path: Path, dpi: int, pfg: bool) -> None:
@@ -551,7 +573,10 @@ def run_legacy_mode(args: argparse.Namespace) -> None:
     if missing:
         raise KeyError(f"Metrics not found in CSV columns: {missing}")
 
-    out = Path(args.out) if args.out else Path(args.metrics_csv).with_name("metrics.png")
+    metrics_csv_path = Path(args.metrics_csv)
+    experiment_name = infer_experiment_name_from_metrics_csv(metrics_csv_path)
+    out = Path(args.out) if args.out else metrics_csv_path.with_name("metrics.png")
+    out = prefix_output_with_experiment(out, experiment_name)
     plot_legacy_single_csv(
         data=data,
         metrics=args.metrics,
