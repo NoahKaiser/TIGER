@@ -19,7 +19,7 @@ loss:
     sdr_type: pairwise_neg_sisdr_silence_aware
     config:
       pit_from: pw_mtx
-      perm_reduce: active_soft_mean  #active_soft_mean or null for standard PIT
+      perm_reduce: null  #active_soft_mean or null for standard PIT
       threshold_byloss: false
   val:
     loss_func: PITLossWrapper
@@ -44,7 +44,7 @@ training:
   pit_activity_gamma: 0.05 # softening factor for PIT active/inactive weighting (lower -> sharper hard-like weights)
   pit_activity_beta: 8.0 # sigmoid slope for activity score from target energy (higher -> steeper active/inactive transition)
   pit_silence_weight: 0.1 # penalty weight for assigning energy to silent target slots
-  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise/epoch=59.ckpt
+  ckpt_path: /usrhomes/s1495/TIGER/Experiments/checkpoint/TIGER-TSE2-ECHI_without-Noise_with_standard_PIT/epoch=171.ckpt
   checkpoint:
     monitor: "val_total_loss"
     mode: "min"
@@ -79,4 +79,4 @@ datamodule:
     mixture_mode: target_sum #'manifest' for using normal noisy mixtures, 'target_sum' for using only target-sum mixtures
 
 exp:
-  exp_name: TIGER-TSE2-ECHI_without-Noise
+  exp_name: TIGER-TSE2-ECHI_without-Noise_with_standard_PIT
